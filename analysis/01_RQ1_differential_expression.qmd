@@ -1,0 +1,14 @@
+---
+title: "01_RQ1_differential_expression"
+author: "Lun Suša (s253705)"
+date: today
+format:
+  html:
+    toc: true
+    theme: flatly
+execute:
+  warning: false
+  message: false
+---
+
+

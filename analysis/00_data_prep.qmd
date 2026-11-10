@@ -1,0 +1,25 @@
+---
+title: "Data Preparation — IMvigor210"
+author: "Lun Suša (s253705)"
+date: today
+format:
+  html:
+    toc: true
+    code-fold: true
+    theme: flatly
+execute:
+  warning: false
+  message: false
+---
+
+# DATA PREPRATION
+
+| Field | Meaning |
+|-------|---------|
+| `counts` | Raw RNAseq counts |
+| `TPM` | Normalized data |
+| `pat_id` | Anonymized patient identifier (e.g. SAM7f0d9cc7f001) |
+| `BOR` | Treatment response: R = complete response, NR = progressive disease |
+| `TMB` | Tumor mutational burden (mut/Mb); NA = missing, not zero |
+| `sample_id` | Identifier aligned to expression matrix columns; duplicates `pat_id` here |
+
