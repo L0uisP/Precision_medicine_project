@@ -3,3 +3,17 @@
 .RData
 .Ruserdata
 .DS_Store
+
+Precision_medicine_project.Rproj
+
+# Data
+data/
+
+# Rendered output
+*_files/
+*.html
+*.pdf
+
+# Quarto cache
+.quarto/
+*_cache/
