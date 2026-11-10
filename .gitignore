@@ -3,3 +3,15 @@
 .RData
 .Ruserdata
 .DS_Store
+
+# Data
+data/
+
+# Rendered output
+*_files/
+*.html
+*.pdf
+
+# Quarto cache
+.quarto/
+*_cache/
