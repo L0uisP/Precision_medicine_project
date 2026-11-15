@@ -12,10 +12,23 @@ execute:
   message: false
 ---
 
+
+## Overview
+
+This notebook prepares the IMvigor210 dataset for all downstream analyses (RQ1–RQ5).
+It loads the raw data, filters lowly expressed genes, and runs DESeq2 normalization.
+The output is a RDS file saved to `data/processed/imvigor210_prepared.rds`.
+
+The filtering step removes genes with fewer than 10 counts in fewer than 10 samples,
+to reduce noise and prepare for DESeq.
+Important genes from the paper and other RQs are checked to still be present after filtering (PDCD1, IFNG, IFNGR1, TGFB1, TGFBR2), before saving.
+
+
+
 # DATA PREPRATION
 
 | Field | Meaning |
-|-------|---------|
+|--------------------------------|----------------------------------------|
 | `counts` | Raw RNAseq counts |
 | `TPM` | Normalized data |
 | `pat_id` | Anonymized patient identifier (e.g. SAM7f0d9cc7f001) |
@@ -23,3 +36,76 @@ execute:
 | `TMB` | Tumor mutational burden (mut/Mb); NA = missing, not zero |
 | `sample_id` | Identifier aligned to expression matrix columns; duplicates `pat_id` here |
 
+# Data Preparation
+
+## Dataset overview
+
+| Field | Meaning |
+|--------------------------------|----------------------------------------|
+| `counts` | Raw RNAseq counts |
+| `TPM` | Normalized data |
+| `pat_id` | Anonymized patient identifier (e.g. SAM7f0d9cc7f001) |
+| `BOR` | Treatment response: R = complete response, NR = progressive disease |
+| `TMB` | Tumor mutational burden (mut/Mb); NA = missing, not zero |
+| `sample_id` | Identifier aligned to expression matrix columns; duplicates `pat_id` here |
+
+## Load libraries
+
+
+## Load libraries
+
+```{r}
+library(DESeq2)
+library(tidyverse)
+```
+
+## Load data
+
+```{r}
+d <- readRDS("../data/IMvigor210_plain.rds")
+```
+
+## Inspect data
+
+```{r}
+dim(d$counts)
+table(d$clinical$BOR)
+sum(is.na(d$clinical$TMB))
+```
+
+## Filter low-expressed genes
+
+```{r}
+keep <- rowSums(d$counts > 10) >= 10
+counts_filtered <- d$counts[keep, ]
+cat("Genes before filtering:", nrow(d$counts), "\n")
+cat("Genes after filtering:", nrow(counts_filtered), "\n")
+```
+
+## Sanity check key genes
+
+```{r}
+key_genes <- c("PDCD1", "IFNG", "IFNGR1", "TGFB1", "TGFBR2")
+key_genes %in% rownames(counts_filtered)
+```
+
+## Create DESeqDataSet
+
+```{r}
+dds <- DESeqDataSetFromMatrix(
+  countData = counts_filtered,
+  colData   = d$clinical,
+  design    = ~ BOR
+)
+dds <- DESeq(dds)
+```
+
+## Save prepared data
+
+```{r}
+saveRDS(list(
+  dds      = dds,
+  tpm      = d$tpm[keep, ],
+  clinical = d$clinical
+), "../data/processed/imvigor210_prepared.rds")
+```
