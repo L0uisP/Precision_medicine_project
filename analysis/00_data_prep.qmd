@@ -21,7 +21,7 @@ The filtering step removes genes with fewer than 10 counts in fewer than 10 samp
 # DATA PREPRATION
 
 | Field | Meaning |
-|----|----|
+|------------------------------------|------------------------------------|
 | `counts` | Raw RNAseq counts |
 | `TPM` | Normalized data |
 | `pat_id` | Anonymized patient identifier (e.g. SAM7f0d9cc7f001) |
@@ -34,7 +34,7 @@ The filtering step removes genes with fewer than 10 counts in fewer than 10 samp
 ## Dataset overview
 
 | Field | Meaning |
-|----|----|
+|------------------------------------|------------------------------------|
 | `counts` | Raw RNAseq counts |
 | `TPM` | Normalized data |
 | `pat_id` | Anonymized patient identifier (e.g. SAM7f0d9cc7f001) |
@@ -78,6 +78,7 @@ keep <- rowSums(d$counts > 10) >= 10
 counts_filtered <- d$counts[keep, ]
 cat("Genes before filtering:", nrow(d$counts), "\n")
 cat("Genes after filtering:", nrow(counts_filtered), "\n")
+saveRDS(counts_filtered,"../data/processed/filtered_counts.rds")
 ```
 
 ## Sanity check key genes
