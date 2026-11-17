@@ -6,6 +6,9 @@
 
 Precision_medicine_project.Rproj
 
+# Data
+/data
+
 # Rendered output
 *_files/
 *.html
