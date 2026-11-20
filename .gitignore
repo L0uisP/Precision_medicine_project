@@ -4,10 +4,12 @@
 .Ruserdata
 .DS_Store
 
+
 Precision_medicine_project.Rproj
 
 # Data
 data/
+*.rds
 
 # Rendered output
 *_files/
