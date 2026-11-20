@@ -7,7 +7,7 @@
 Precision_medicine_project.Rproj
 
 # Data
-/data
+data/
 
 # Rendered output
 *_files/
