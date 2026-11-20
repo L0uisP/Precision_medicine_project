@@ -12,23 +12,16 @@ execute:
   message: false
 ---
 
-
 ## Overview
 
-This notebook prepares the IMvigor210 dataset for all downstream analyses (RQ1–RQ5).
-It loads the raw data, filters lowly expressed genes, and runs DESeq2 normalization.
-The output is a RDS file saved to `data/processed/imvigor210_prepared.rds`.
+This notebook prepares the IMvigor210 dataset for all downstream analyses (RQ1–RQ5). It loads the raw data, filters lowly expressed genes, and runs DESeq2 normalization. The output is a RDS file saved to `data/processed/imvigor210_prepared.rds`.
 
-The filtering step removes genes with fewer than 10 counts in fewer than 10 samples,
-to reduce noise and prepare for DESeq.
-Important genes from the paper and other RQs are checked to still be present after filtering (PDCD1, IFNG, IFNGR1, TGFB1, TGFBR2), before saving.
-
-
+The filtering step removes genes with fewer than 10 counts in fewer than 10 samples, to reduce noise and prepare for DESeq. Important genes from the paper and other RQs are checked to still be present after filtering (PDCD1, IFNG, IFNGR1, TGFB1, TGFBR2), before saving.
 
 # DATA PREPRATION
 
 | Field | Meaning |
-|--------------------------------|----------------------------------------|
+|------------------------------------|------------------------------------|
 | `counts` | Raw RNAseq counts |
 | `TPM` | Normalized data |
 | `pat_id` | Anonymized patient identifier (e.g. SAM7f0d9cc7f001) |
@@ -41,7 +34,7 @@ Important genes from the paper and other RQs are checked to still be present aft
 ## Dataset overview
 
 | Field | Meaning |
-|--------------------------------|----------------------------------------|
+|------------------------------------|------------------------------------|
 | `counts` | Raw RNAseq counts |
 | `TPM` | Normalized data |
 | `pat_id` | Anonymized patient identifier (e.g. SAM7f0d9cc7f001) |
@@ -50,7 +43,6 @@ Important genes from the paper and other RQs are checked to still be present aft
 | `sample_id` | Identifier aligned to expression matrix columns; duplicates `pat_id` here |
 
 ## Load libraries
-
 
 ## Load libraries
 
@@ -63,6 +55,12 @@ library(tidyverse)
 
 ```{r}
 d <- readRDS("../data/IMvigor210_plain.rds")
+```
+
+## Load data (from the server)
+
+```{r}
+d <- readRDS("/home/projects/22123/IMvigor210_plain.rds")
 ```
 
 ## Inspect data
@@ -80,6 +78,7 @@ keep <- rowSums(d$counts > 10) >= 10
 counts_filtered <- d$counts[keep, ]
 cat("Genes before filtering:", nrow(d$counts), "\n")
 cat("Genes after filtering:", nrow(counts_filtered), "\n")
+saveRDS(counts_filtered,"../data/processed/filtered_counts.rds")
 ```
 
 ## Sanity check key genes

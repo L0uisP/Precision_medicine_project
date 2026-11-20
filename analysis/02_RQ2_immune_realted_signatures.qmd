@@ -1,0 +1,93 @@
+---
+title: "02_RQ2_immune_realted_signatures"
+format: html
+author: "Rasmus Bertelsen (s235350)"
+date: today
+format:
+  html:
+    toc: true
+    theme: flatly
+execute:
+  warning: false
+  message: false
+---
+
+Are 18-gene T-cell–inflamed GEP associated with treatment response?
+
+```{r}
+library(tidyverse)
+
+```
+
+```{r}
+expr <- readRDS("../data/processed/filtered_counts.rds")
+d <- readRDS("../data/processed/imvigor210_prepared.rds")
+meta <- d$clinical
+```
+
+First we check that none of the genes of interest where cut in the preprocessing
+
+```{r}
+#| label: calculate-gep
+
+GEP_genes <- c(
+"CD27", "CD274", "PDCD1", "CD276", "CD8A", "CMKLR1",
+"CXCL9", "CXCR6", "HLA-DQA1", "HLA-DRB1", "HLA-E",
+"IDO1", "LAG3", "NKG7", "PDCD1LG2", "PSMB10", "STAT1",
+"TIGIT"
+)
+
+GEP_genes %in% rownames(expr)
+```
+
+```{r}
+expr_GEP <- expr[rownames(expr) %in% GEP_genes, ]
+expr_GEP_scaled <- expr_GEP |>
+  t() |>
+  scale() |>
+  t()
+GEP_score_response <- data.frame(
+  pat_id = colnames(expr_GEP_scaled),
+  GEP_score = colMeans(expr_GEP_scaled)
+) |>
+  inner_join(meta, by = "pat_id")
+
+GEP_score_response |> head()
+```
+
+To see if there is an effect we can make a regression model, or make a threshold and compare groups. We make a boxplot and histogram to see if there is are clear groups
+
+```{r}
+GEP_score |> hist(breaks=16)
+```
+
+```{r}
+GEP_score |> hist(breaks = 16)
+```
+
+From the ammount of outliers and a clear island in the histogram we conclude there is a meaningful grouping of high and low GEP scoring groups. The sizes of these groups are however very different, and that should be kept in mind whilst comparing
+
+```{r}
+wilcox_test <- wilcox.test(GEP_score ~ BOR, data = GEP_score_response)
+wilcox_test
+```
+
+```{r}
+plot_Response_boxplot <- function(data, variable, y_label, test_result) {
+  ggplot(data, aes(x = BOR, y = .data[[variable]])) +
+    geom_boxplot(outlier.shape = NA) +
+    geom_jitter(width = 0.12, alpha = 0.6) +
+    annotate(
+      "text",
+      x = Inf, y = Inf,
+      label = paste0("p = ", signif(test_result$p.value, 3)),
+      hjust = 1.1, vjust = 1.5
+    ) +
+    labs(
+      x = "Response class",
+      y = y_label
+    ) +
+    theme_minimal()
+}
+plot_Response_boxplot(GEP_score_response, "GEP_score", "T cell-inflamed GEP score", wilcox_test)
+```
