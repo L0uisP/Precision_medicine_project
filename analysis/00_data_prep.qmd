@@ -1,6 +1,8 @@
 ---
 title: "Data Preparation — IMvigor210"
-author: "Lun Suša (s253705)"
+author: "Lun Suša (s253705), 
+        Rasmus Bertelsen (s235350), 
+        Maxence Marbouty"
 date: today
 format:
   html:
