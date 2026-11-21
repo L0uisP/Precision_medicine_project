@@ -12,3 +12,143 @@ execute:
 ---
 
 
+# RQ1 — Differential expression
+
+Which genes are differentially expressed between patients with complete response and patients with progressive disease following anti-PD-L1 treatment?
+
+### Load data and packages
+
+```{r}
+library(tidyverse)
+library(DESeq2)
+library(fgsea)
+library(msigdbr)
+library(dplyr)
+library(tidyr)
+library(pheatmap)
+
+# Load prepared data
+prepared <- readRDS("../data/processed/imvigor210_prepared.rds")
+```
+
+
+### DESeq2 analysis
+Differential expression analysis between responders/non-responder using DESeq2, and identify significantly differentially expressed genes.
+
+```{r}
+dds <- prepared$dds
+dds
+```
+```{r}
+# Extract results (NR is reference, positive LFC = higher in R)
+res <- results(dds, alpha = 0.05)
+summary(res)
+```
+```{r}
+# Rank genes for GSEA
+ranked_genes <- res$stat
+names(ranked_genes) <- rownames(res)
+ranked_genes <- ranked_genes[!is.na(ranked_genes)]
+
+# remove empty string names
+ranked_genes <- ranked_genes[names(ranked_genes) != ""]
+```
+
+```{r}
+# GSEA with MSigDB GO Biological Process
+gene_sets <- msigdbr(species = "Homo sapiens", collection = "C5", subcollection = "BP")
+gene_sets <- split(x = gene_sets$gene_symbol, f = gene_sets$gs_name)
+
+set.seed(42)
+fgsea_res <- fgsea(pathways = gene_sets, stats = ranked_genes, nPermSimple = 10000)
+```
+
+```{r}
+# Look at top results
+fgsea_res |>
+  arrange(padj) |>
+  head(20)
+```
+
+```{r}
+# Top upregulated pathways in responders (positive NES)
+fgsea_res |>
+  filter(padj < 0.05, NES > 0) |>
+  arrange(padj) |>
+  head(10)
+```
+
+```{r}
+# Top downregulated pathways in responders (negative NES)
+fgsea_res |>
+  filter(padj < 0.05, NES < 0) |>
+  arrange(padj) |>
+  head(10)
+```
+
+
+### Results & interpretation
+
+
+Visualize the results using e.g. volcano plots and heatmaps of selected genes.
+Investigate the biological functions of differentially expressed genes and discuss their potential relevance to immunotherapy response.
+
+```{r}
+# Volcano plot
+res_df <- as.data.frame(res) |>
+  mutate(significant = padj < 0.05 & !is.na(padj))
+
+ggplot(res_df, aes(x = log2FoldChange, y = -log10(padj), color = significant)) +
+  geom_point() +
+  scale_color_manual(values = c("grey", "limegreen")) +
+  labs(x = "Log2 Fold Change", y = "-Log10 Adjusted P-value",
+       title = "Differential expression: R vs NR") +
+  theme_minimal()
+```
+```{r}
+
+# Get top 30 significant DEGs by adjusted p-value
+top_genes <- as.data.frame(res) |>
+  filter(!is.na(padj), padj < 0.05, abs(log2FoldChange) > 1) |>
+  arrange(padj) |>
+  head(30)
+
+# Extract TPM values for top genes
+tpm_matrix <- prepared$tpm[rownames(top_genes), ]
+
+# Log transform for visualization
+tpm_log <- log2(tpm_matrix + 1)
+
+# Annotation for columns (samples)
+annotation <- data.frame(BOR = prepared$clinical$BOR)
+rownames(annotation) <- colnames(tpm_log)
+
+# Plot
+pheatmap(tpm_log,
+         annotation_col = annotation,
+         show_rownames = TRUE,
+         show_colnames = FALSE,
+         scale = "row",
+         clustering_method = "complete",
+         main = "Top 30 DEGs: R vs NR")
+```
+```{r}
+# Order samples by BOR
+sample_order <- order(prepared$clinical$BOR)
+
+pheatmap(tpm_log[, sample_order],
+         annotation_col = annotation,
+         show_rownames = TRUE,
+         show_colnames = FALSE,
+         scale = "row",
+         cluster_cols = FALSE,
+         breaks = seq(-3, 3, length.out = 101),
+         main = "Top 30 DEGs: R vs NR")
+```
+
+### Limitations
+
+Discuss the limitations of the analysis, including potential confounding factors and why differential expression does not necessarily imply a causal role in treatment response.
+
+
+
