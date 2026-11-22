@@ -542,3 +542,47 @@ cox.zph(cox_shared_tnb)
 Evaluating both continuous $\log_2(\text{burden} + 1)$ Cox models on the shared complete-case cohort removes differences in sample composition and event counts between the TMB and TNB analyses, allowing a more direct check of whether neoantigen burden shows a stronger protective association with overall survival than TMB on the same patients.
 
 On the shared complete-case cohort, the protective association with overall survival persists for both $\log_2(\text{TNB} + 1)$ ($\text{HR} = 0.48$, 95% CI: $0.35\text{-}0.67$; `cox.zph` $p = 0.93$) and $\log_2(\text{TMB} + 1)$ ($\text{HR} = 0.73$, 95% CI: $0.61\text{-}0.87$; `cox.zph` $p = 0.34$). Because both models are evaluated on the exact same patients without violations of the proportional hazards assumption, this confirms that the stronger per-unit hazard reduction observed for neoantigen burden compared with TMB is not simply an artifact of differing sample subsets.
+
+## Multivariable Cox Models Adjusting for Response
+
+To test whether continuous $\log_2(\text{TMB} + 1)$ and $\log_2(\text{TNB} + 1)$ remain associated with overall survival after accounting for response status (`Responder_Group`), we fit multivariable Cox proportional hazards models without shrinking sample sizes by splitting into separate `R` and `NR` subsets.
+
+```{r}
+# Ensure Responder_Group is a factor with a clear reference level (e.g., NR as reference)
+clean_clinical_TMB <- clean_clinical_TMB |>
+  mutate(Responder_Group = factor(Responder_Group, levels = c("NR", "R")))
+
+clean_clinical_TNB <- clean_clinical_TNB |>
+  mutate(Responder_Group = factor(Responder_Group, levels = c("NR", "R")))
+
+# Multivariable Cox model for TMB adjusted for responder status
+cox_mv_tmb <- coxph(
+  Surv(os, censOS) ~ log2(FMOne.mutation.burden.per.MB + 1) + Responder_Group,
+  data = clean_clinical_TMB
+)
+
+exp(cbind(
+  HR = coef(cox_mv_tmb),
+  confint(cox_mv_tmb)
+))
+summary(cox_mv_tmb)
+cox.zph(cox_mv_tmb)
+```
+
+```{r}
+# Multivariable Cox model for TNB adjusted for responder status
+cox_mv_tnb <- coxph(
+  Surv(os, censOS) ~ log2(Neoantigen.burden.per.MB + 1) + Responder_Group,
+  data = clean_clinical_TNB
+)
+
+exp(cbind(
+  HR = coef(cox_mv_tnb),
+  confint(cox_mv_tnb)
+))
+
+summary(cox_mv_tnb)
+cox.zph(cox_mv_tnb)
+```
+
+In both multivariable models, `Responder_Group` is the dominant predictor of overall survival—with responders (`Responder_GroupR`) showing a markedly lower hazard of death than non-responders in both the TMB model ($\text{HR} = 0.037$, 95% CI: $0.014\text{-}0.102$) and the TNB model ($\text{HR} = 0.035$, 95% CI: $0.011\text{-}0.111$). Once adjusted for response status, the hazard ratios for $\log_2(\text{TMB} + 1)$ ($\text{HR} = 1.00$, 95% CI: $0.84\text{-}1.19$) and $\log_2(\text{TNB} + 1)$ ($\text{HR} = 0.85$, 95% CI: $0.64\text{-}1.12$) attenuate toward $1$ with confidence intervals crossing $1$, supporting a model in which higher burden improves survival largely through - or alongside - achieving a clinical response rather than exerting a large independent effect conditional on response group.
