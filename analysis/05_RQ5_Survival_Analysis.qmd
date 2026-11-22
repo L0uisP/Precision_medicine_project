@@ -282,7 +282,6 @@ Within responders ($n = 61$: 50 high-TMB and 11 low-TMB), only 4 events occurred
 plot(cox.zph(cox_tmb_r))
 ```
 
-
 ## TNB Survival Analysis
 
 ```{r}
@@ -487,3 +486,59 @@ cox.zph(cox_tnb_nr)
 
 The same pattern holds for neoantigen burden: when the continuous $\log_2(\text{TNB} + 1)$ Cox model is fit separately within responders and non-responders, the 95% confidence intervals again include $1$, underscoring that while overall survival benefits associate with higher burden across the cohort, smaller within-subgroup sample and event counts limit statistical precision within each response group alone.
 
+## Shared Complete-Case Comparison (TMB vs. TNB)
+
+Because `clean_clinical_TMB` and `clean_clinical_TNB` are filtered separately for missing values in each biomarker, their patient cohorts do not overlap completely. Here we isolate the shared complete-case subset with non-missing values for both `FMOne.mutation.burden.per.MB` and `Neoantigen.burden.per.MB` (as well as survival outcome variables) so we can compare the two continuous Cox models on the exact same patients.
+
+```{r}
+# Identify shared patients using row names with non-missing survival data
+common_ids <- intersect(
+  rownames(clean_clinical_TMB),
+  rownames(clean_clinical_TNB)
+)
+
+df_shared <- clean_clinical_TMB[common_ids, , drop = FALSE] |>
+  mutate(Neoantigen.burden.per.MB = clean_clinical_TNB[common_ids, "Neoantigen.burden.per.MB"]) |>
+  filter(
+    !is.na(FMOne.mutation.burden.per.MB),
+    !is.na(Neoantigen.burden.per.MB),
+    !is.na(os),
+    !is.na(censOS)
+  )
+
+cat("Shared complete-case sample size (n):", nrow(df_shared), "\n")
+cat("Total OS events in shared subset:", sum(df_shared$censOS == 1, na.rm = TRUE), "\n")
+```
+
+```{r}
+# Continuous Cox model for TMB on the shared subset
+cox_shared_tmb <- coxph(
+  Surv(os, censOS) ~ log2(FMOne.mutation.burden.per.MB + 1),
+  data = df_shared
+)
+
+exp(cbind(
+  HR = coef(cox_shared_tmb),
+  confint(cox_shared_tmb)
+))
+
+cox.zph(cox_shared_tmb)
+```
+
+```{r}
+# Continuous Cox model for TNB on the shared subset
+cox_shared_tnb <- coxph(
+  Surv(os, censOS) ~ log2(Neoantigen.burden.per.MB + 1),
+  data = df_shared
+)
+
+exp(cbind(
+  HR = coef(cox_shared_tnb),
+  confint(cox_shared_tnb)
+))
+cox.zph(cox_shared_tnb)
+```
+
+Evaluating both continuous $\log_2(\text{burden} + 1)$ Cox models on the shared complete-case cohort removes differences in sample composition and event counts between the TMB and TNB analyses, allowing a more direct check of whether neoantigen burden shows a stronger protective association with overall survival than TMB on the same patients.
+
+On the shared complete-case cohort, the protective association with overall survival persists for both $\log_2(\text{TNB} + 1)$ ($\text{HR} = 0.48$, 95% CI: $0.35\text{-}0.67$; `cox.zph` $p = 0.93$) and $\log_2(\text{TMB} + 1)$ ($\text{HR} = 0.73$, 95% CI: $0.61\text{-}0.87$; `cox.zph` $p = 0.34$). Because both models are evaluated on the exact same patients without violations of the proportional hazards assumption, this confirms that the stronger per-unit hazard reduction observed for neoantigen burden compared with TMB is not simply an artifact of differing sample subsets.
