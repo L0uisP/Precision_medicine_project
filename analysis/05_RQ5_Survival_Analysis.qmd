@@ -75,8 +75,6 @@ km_plot <- function(fit, title, p) {
 
 Several variable to check : PD vs SD, R vs NR, IC level, TMB, TNB, TC level, ....
 
-### Whole cohort
-
 Begin by inspecting TMB distribution to find a good cut-off point.
 
 ```{r}
@@ -96,6 +94,8 @@ ggplot(clean_clinical_TMB,
   theme_minimal()+
   labs(title = "TMB Distribution")
 ```
+
+### Whole cohort
 
 ```{r}
 #Find the optimal cutpoint for TMB against overall survival
@@ -227,6 +227,8 @@ ggplot(clean_clinical_TNB,
   labs(title = "TNB Distribution")
 ```
 
+### Whole cohort
+
 ```{r}
 #Find the optimal cutpoint for TNB against overall survival
 cut_tnb <- surv_cutpoint(
@@ -260,4 +262,86 @@ lr_tnb <- survdiff(Surv(os, censOS) ~ TNB_Cutpoint_Group,
 km_plot(fit_tnb, 
         "Survival analysis stratified by TNB", 
         lr_p(lr_tnb))
+```
+
+### Stratified by responder/non responder
+
+```{r}
+df_tnb_r <- clean_clinical_TNB |> 
+  filter(Responder_Group == "R")
+
+cut_tnb_r <- surv_cutpoint(
+  data = df_tnb_r,
+  time = "os",
+  event = "censOS",
+  variables = "Neoantigen.burden.per.MB",
+  minprop = 0.1
+)
+
+summary(cut_tnb_r)
+plot(cut_tnb_r, "Neoantigen.burden.per.MB", palette = "npg")
+
+cat_tnb_r <- surv_categorize(cut_tnb_r)
+
+df_tnb_r <- df_tnb_r |> 
+  mutate(TNB_Cutpoint_Group = cat_tnb_r$Neoantigen.burden.per.MB)
+```
+
+```{r}
+df_tnb_nr <- clean_clinical_TNB |> 
+  filter(Responder_Group == "NR")
+
+cut_tnb_nr <- surv_cutpoint(
+  data = df_tnb_nr,
+  time = "os",
+  event = "censOS",
+  variables = "Neoantigen.burden.per.MB",
+  minprop = 0.1
+)
+
+summary(cut_tnb_nr)
+plot(cut_tnb_nr, "Neoantigen.burden.per.MB", palette = "npg")
+
+cat_tnb_nr <- surv_categorize(cut_tnb_nr)
+
+df_tnb_nr <- df_tnb_nr |> 
+  mutate(TNB_Cutpoint_Group = cat_tnb_nr$Neoantigen.burden.per.MB)
+```
+
+```{r}
+table(df_tnb_r$TNB_Cutpoint_Group)
+```
+
+```{r}
+table(df_tnb_nr$TNB_Cutpoint_Group)
+```
+
+```{r}
+fit_tnb_r <- survfit(Surv(os, censOS) ~ TNB_Cutpoint_Group,
+                   data = df_tnb_r)
+lr_tnb_r <- survdiff(Surv(os, censOS) ~ TNB_Cutpoint_Group,
+                   data = df_tnb_r)
+
+km_plot(fit_tnb_r,
+        "Survival analysis stratified by TNB for the Responder Group",
+        lr_p(lr_tnb_r))
+```
+
+```{r}
+table(df_tnb_r$Best.Confirmed.Overall.Response, df_tnb_r$TNB_Cutpoint_Group)
+```
+
+```{r}
+fit_tnb_nr <- survfit(Surv(os, censOS) ~ TNB_Cutpoint_Group,
+                     data = df_tnb_nr)
+lr_tnb_nr <- survdiff(Surv(os, censOS) ~ TNB_Cutpoint_Group,
+                     data = df_tnb_nr)
+
+km_plot(fit_tnb_nr,
+        "Survival analysis stratified by TNB for the Non-Responder Group",
+        lr_p(lr_tnb_nr))
+```
+
+```{r}
+table(df_tnb_nr$Best.Confirmed.Overall.Response, df_tnb_nr$TNB_Cutpoint_Group)
 ```
