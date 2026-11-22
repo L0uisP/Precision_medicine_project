@@ -1,0 +1,263 @@
+---
+title: "Survival_Analysis_IMVigor"
+format: html
+editor: visual
+---
+
+## Project Survival Analysis exploration
+
+Based on cds data base from the full study git.
+
+## Data loading + packages
+
+Load all needed packages.
+
+```{r}
+library(survival)
+library(DESeq2)
+library(GSVA)
+library(ggplot2)
+library(ggsurvfit)
+library(ggpubr)
+library(tidyverse)
+library(survminer)
+```
+
+Set working directory and load the dataset.
+
+```{r}
+clean_clinical_TMB <- readRDS("data/processed/clean_clinical_TMB.rds")
+clean_clinical_TNB <- readRDS("data/processed/clean_clinical_TNB.rds")
+
+glimpse(clean_clinical_TMB)
+glimpse(clean_clinical_TNB)
+```
+
+### Helper functions
+
+```{r}
+# Convert a survdiff() chi-squared statistic to a p-value.
+lr_p <- function(x) {
+  pchisq(x$chisq, df = length(x$n) - 1, lower.tail = FALSE)
+}
+
+# Draw a Kaplan–Meier curve with confidence bands, a risk table, and p-value.
+km_plot <- function(fit, title, p) {
+  ggsurvfit(fit, linewidth = 1) +
+    add_confidence_interval() +
+    annotate(
+      "text",
+      x = Inf, y = Inf,
+      label = paste0(
+        "Log-rank p = ",
+        format.pval(p, digits = 2, eps = 0.001)
+      ),
+      hjust = 1.1, vjust = 1.4
+    ) +
+    add_risktable(
+      risktable_stats = c("n.risk", "cum.event"),
+      stats_label = c("At risk", "Events")
+    ) +
+    scale_ggsurvfit() +
+    labs(
+      title = title,
+      x = "Overall survival (months)",
+      y = "Overall survival probability",
+      color = "Group",
+      fill = "Group"
+    ) +
+    theme_classic() +
+    theme(legend.position = "bottom")
+}
+```
+
+## TMB Survival Analysis
+
+Several variable to check : PD vs SD, R vs NR, IC level, TMB, TNB, TC level, ....
+
+### Whole cohort
+
+Begin by inspecting TMB distribution to find a good cut-off point.
+
+```{r}
+ggplot(clean_clinical_TMB, 
+       aes(x= FMOne.mutation.burden.per.MB)) + 
+  geom_histogram() +
+  theme_minimal()+
+  labs(title = "TMB Distribution")
+```
+
+Looks like a Negative binomiale distribution, thus taking median value would create imbalanced groups.
+
+```{r}
+ggplot(clean_clinical_TMB, 
+       aes(x= log(FMOne.mutation.burden.per.MB+1))) + 
+  geom_histogram() +
+  theme_minimal()+
+  labs(title = "TMB Distribution")
+```
+
+```{r}
+#Find the optimal cutpoint for TMB against overall survival
+cut_tmb <- surv_cutpoint(
+  data = clean_clinical_TMB,
+  time = "os",
+  event = "censOS",
+  variables = "FMOne.mutation.burden.per.MB",
+  minprop = 0.1
+)
+
+summary(cut_tmb)
+plot(cut_tmb, "FMOne.mutation.burden.per.MB", palette = "npg")
+
+#Categorize patients into High vs. Low TMB using the cutpoint
+cat_tmb <- surv_categorize(cut_tmb)
+```
+
+```{r}
+# Add the new factor column back to your clinical data frame
+clean_clinical_TMB <- clean_clinical_TMB |> 
+  mutate(TMB_Cutpoint_Group = cat_tmb$FMOne.mutation.burden.per.MB)
+
+table(clean_clinical_TMB$TMB_Cutpoint_Group)
+
+fit_tmb <- survfit(Surv(os, censOS) ~ TMB_Cutpoint_Group,
+                   data = clean_clinical_TMB)
+lr_tmb <- survdiff(Surv(os, censOS) ~ TMB_Cutpoint_Group,
+                   data = clean_clinical_TMB)
+
+km_plot(fit_tmb,
+        "Survival analysis stratified by TMB",
+        lr_p(lr_tmb))
+```
+
+### Stratified by responder/non responder
+
+```{r}
+df_r <- clean_clinical_TMB |> 
+  filter(Responder_Group == "R")
+
+cut_tmb_r <- surv_cutpoint(
+  data = df_r,
+  time = "os",
+  event = "censOS",
+  variables = "FMOne.mutation.burden.per.MB",
+  minprop = 0.1
+)
+
+summary(cut_tmb_r)
+plot(cut_tmb_r, "FMOne.mutation.burden.per.MB", palette = "npg")
+
+cat_tmb_r <- surv_categorize(cut_tmb_r)
+
+df_r <- df_r |> 
+  mutate(TMB_Cutpoint_Group = cat_tmb_r$FMOne.mutation.burden.per.MB)
+```
+
+```{r}
+df_nr <- clean_clinical_TMB |> 
+  filter(Responder_Group == "NR")
+
+cut_tmb_nr <- surv_cutpoint(
+  data = df_nr,
+  time = "os",
+  event = "censOS",
+  variables = "FMOne.mutation.burden.per.MB",
+  minprop = 0.1
+)
+
+summary(cut_tmb_nr)
+plot(cut_tmb_nr, "FMOne.mutation.burden.per.MB", palette = "npg")
+
+cat_tmb_nr <- surv_categorize(cut_tmb_nr)
+
+df_nr <- df_nr |> 
+  mutate(TMB_Cutpoint_Group = cat_tmb_nr$FMOne.mutation.burden.per.MB)
+```
+
+```{r}
+table(df_r$TMB_Cutpoint_Group)
+```
+
+```{r}
+table(df_nr$TMB_Cutpoint_Group)
+```
+
+```{r}
+fit_tmb_r <- survfit(Surv(os, censOS) ~ TMB_Cutpoint_Group,
+                   data = df_r)
+lr_tmb_r <- survdiff(Surv(os, censOS) ~ TMB_Cutpoint_Group,
+                   data = df_r)
+
+km_plot(fit_tmb_r,
+        "Survival analysis stratified by TMB for the Responder Group",
+        lr_p(lr_tmb_r))
+```
+
+```{r}
+fit_tmb_nr <- survfit(Surv(os, censOS) ~ TMB_Cutpoint_Group,
+                     data = df_nr)
+lr_tmb_nr <- survdiff(Surv(os, censOS) ~ TMB_Cutpoint_Group,
+                     data = df_nr)
+
+km_plot(fit_tmb_nr,
+        "Survival analysis stratified by TMB for the Non-Responder Group",
+        lr_p(lr_tmb_nr))
+```
+
+```{r}
+table(df_nr$Best.Confirmed.Overall.Response, df_nr$TMB_Cutpoint_Group)
+```
+
+## TNB Survival Analysis
+
+```{r}
+ggplot(clean_clinical_TNB, 
+       aes(x= Neoantigen.burden.per.MB)) + 
+  geom_histogram() +
+  theme_minimal()+
+  labs(title = "TNB Distribution")
+```
+
+```{r}
+ggplot(clean_clinical_TNB, 
+       aes(x= log(Neoantigen.burden.per.MB+1))) + 
+  geom_histogram() +
+  theme_minimal()+
+  labs(title = "TNB Distribution")
+```
+
+```{r}
+#Find the optimal cutpoint for TNB against overall survival
+cut_tnb <- surv_cutpoint(
+  data = clean_clinical_TNB,
+  time = "os",
+  event = "censOS",
+  variables = "Neoantigen.burden.per.MB",
+  minprop = 0.1
+)
+
+summary(cut_tnb)
+plot(cut_tnb, "Neoantigen.burden.per.MB", palette = "npg")
+
+#Categorize patients into High vs. Low TMB using the cutpoint
+cat_tnb <- surv_categorize(cut_tnb)
+
+```
+
+```{r}
+# Add the new factor column back to your clinical data frame
+clean_clinical_TNB <- clean_clinical_TNB |> 
+  mutate(TNB_Cutpoint_Group = cat_tnb$Neoantigen.burden.per.MB)
+
+table(clean_clinical_TNB$TNB_Cutpoint_Group)
+
+fit_tnb <- survfit(Surv(os, censOS) ~ TNB_Cutpoint_Group, 
+                   data = clean_clinical_TNB)
+lr_tnb <- survdiff(Surv(os, censOS) ~ TNB_Cutpoint_Group, 
+                   data = clean_clinical_TNB)
+
+km_plot(fit_tnb, 
+        "Survival analysis stratified by TNB", 
+        lr_p(lr_tnb))
+```

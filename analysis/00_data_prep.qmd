@@ -16,9 +16,9 @@ execute:
 
 ## Overview
 
-This notebook prepares the IMvigor210 dataset for all downstream analyses (RQ1–RQ5). It loads the raw data, filters lowly expressed genes, and runs DESeq2 normalization. The output is a RDS file saved to `data/processed/imvigor210_prepared.rds`.
+This notebook prepares the IMvigor210 dataset for all downstream analyses. First, it loads the raw RNA-seq data, filters lowly expressed genes (removing genes with fewer than 10 counts in fewer than 10 samples while verifying key genes such as *PDCD1*, *IFNG*, *IFNGR1*, *TGFB1*, and *TGFBR2* remain present), and runs DESeq2 normalization, saving the result to `data/processed/imvigor210_prepared.rds` for RQ1–RQ4.
 
-The filtering step removes genes with fewer than 10 counts in fewer than 10 samples, to reduce noise and prepare for DESeq. Important genes from the paper and other RQs are checked to still be present after filtering (PDCD1, IFNG, IFNGR1, TGFB1, TGFBR2), before saving.
+Second, it prepares the `cds` object from the Mariathasan et al. (2018) cohort for survival analysis by extracting clinical metadata, counts, and gene annotations, defining responder groups (`CR`/`PR` vs. `SD`/`PD`), inspecting missingness across TMB (`FMOne.mutation.burden.per.MB`) and TNB (`Neoantigen.burden.per.MB`), and creating biomarker-specific subsets.
 
 # DATA PREPRATION
 
@@ -109,4 +109,90 @@ saveRDS(list(
   tpm      = d$tpm[keep, ],
   clinical = d$clinical
 ), "../data/processed/imvigor210_prepared.rds")
+```
+
+# Survival Analysis Data Prepartion (`cds` Cohort)
+
+This section prepares the `cds` object from the Mariathasan et al. (2018) IMvigor210 cohort for overall survival (`os`, `censOS`) analyses stratified by response and mutational/neoantigen burden.
+
+-   **`FMOne.mutation.burden.per.MB` (TMB):** Mutations per megabase from the targeted FoundationOne panel.
+-   **`Neoantigen.burden.per.MB` (TNB):** Neoantigen burden per megabase derived from whole-exome sequencing (WES).
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+library(SummarizedExperiment)
+
+# Load cds dataset 
+load("../cds.RData")
+
+clinical_data <- as.data.frame(colData(cds))
+count_matrix <- counts(cds)
+gene_info <- as.data.frame(rowData(cds))
+rownames(count_matrix) <- make.unique(as.character(gene_info$symbol))
+```
+
+```{r}
+ggplot(
+  clinical_data,
+  mapping = aes(x = Neoantigen.burden.per.MB, y = FMOne.mutation.burden.per.MB)
+) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", color = "blue", se = FALSE) +
+  stat_cor(method = "pearson") +
+  theme_minimal() +
+  labs(
+    title = "Correlation: TNB vs. TMB",
+    x = "Neoantigen Burden (per MB)",
+    y = "Tumor Mutational Burden (per MB)"
+  )
+```
+
+The scatter plot demonstrates a positive correlation between Tumor Neoantigen Burden (TNB) and Tumor Mutational Burden (TMB). However, while the Pearson correlation coefficient ($R = 0.85, p < 2.2e-16$) indicates a statistically significant relationship, the variance around the trendline - particularly among highly mutated samples - suggests they are not perfectly interchangeable metrics. Therefore, we will proceed with the survival analysis using both subsets independently to determine their distinct predictive values.
+
+We classify **CR** (Complete Response) and **PR** (Partial Response) as **R** (Responder), and **SD** (Stable Disease) and **PD** (Progressive Disease) as **NR** (Non-Responder), dropping missing `binaryResponse` values.
+
+```{r}
+clean_clinical <- clinical_data |>
+  filter(!is.na(binaryResponse)) |>
+  mutate(Responder_Group = ifelse(binaryResponse %in% c("CR", "PR"), "R", "NR"))
+
+table(clean_clinical$Responder_Group)
+```
+
+```{r}
+cat("\nOverall survival event status:\n")
+print(table(Event = clean_clinical$censOS))
+
+cat("\nResponse by OS event status:\n")
+print(table(Response = clean_clinical$Responder_Group, OS_event = clean_clinical$censOS))
+
+print(colSums(is.na(clean_clinical[c(
+  "Responder_Group",
+  "os",
+  "censOS",
+  "FMOne.mutation.burden.per.MB",
+  "Neoantigen.burden.per.MB"
+)])))
+```
+
+Because TMB and TNB come from different sequencing assays with partially independent missingness, we inspect their overlap and create non-missing subsets for each biomarker:
+
+```{r}
+table(
+  Missing_TMB = is.na(clean_clinical$FMOne.mutation.burden.per.MB),
+  Missing_TNB = is.na(clean_clinical$Neoantigen.burden.per.MB)
+)
+
+clean_clinical_TMB <- clean_clinical |>
+  filter(!is.na(FMOne.mutation.burden.per.MB))
+
+clean_clinical_TNB <- clean_clinical |>
+  filter(!is.na(Neoantigen.burden.per.MB))
+```
+
+```{r}
+saveRDS(clean_clinical_TMB, "../data/processed/clean_clinical_TMB.rds")
+saveRDS(clean_clinical_TNB, "../data/processed/clean_clinical_TNB.rds")
 ```
