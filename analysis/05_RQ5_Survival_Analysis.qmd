@@ -209,6 +209,80 @@ km_plot(fit_tmb_nr,
 table(df_nr$Best.Confirmed.Overall.Response, df_nr$TMB_Cutpoint_Group)
 ```
 
+### Hazard Ratio
+
+```{r}
+# Model TMB continuously; one unit is one doubling of TMB
+cox_tmb <- coxph(
+  Surv(os, censOS) ~ log2(FMOne.mutation.burden.per.MB+1),
+  data = clean_clinical_TMB
+)
+
+# Display the hazard ratio and 95% confidence interval
+exp(cbind(
+  HR = coef(cox_tmb),
+  confint(cox_tmb)
+))
+```
+
+```{r}
+# Display the complete Cox-model result
+summary(cox_tmb)
+```
+
+```{r}
+# Check the proportional-hazards assumption
+ph_tmb <- cox.zph(cox_tmb)
+ph_tmb
+```
+
+A continuous Cox proportional hazards model on $\log_2(\text{TMB} + 1)$ shows that higher Tumor Mutational Burden is significantly associated with a lower hazard of death for the whole cohort and therefore better overall survival ($\text{HR} = 0.75$, 95% CI: $0.64\text{-}0.88$). The proportional hazards assumption is not violated ($p = 0.38$), supporting a consistent protective association across follow-up time and reinforcing our Kaplan-Meier findings without relying on a single cutoff.
+
+```{r}
+# Model TMB continuously; one unit is one doubling of TMB
+cox_tmb_r <- coxph(
+  Surv(os, censOS) ~ log2(FMOne.mutation.burden.per.MB+1),
+  data = df_r
+)
+
+# Display the hazard ratio and 95% confidence interval
+exp(cbind(
+  HR = coef(cox_tmb_r),
+  confint(cox_tmb_r)
+))
+```
+
+```{r}
+cox.zph(cox_tmb_r)
+```
+
+```{r}
+# Model TMB continuously; one unit is one doubling of TMB
+cox_tmb_nr <- coxph(
+  Surv(os, censOS) ~ log2(FMOne.mutation.burden.per.MB+1),
+  data = df_nr
+)
+
+# Display the hazard ratio and 95% confidence interval
+exp(cbind(
+  HR = coef(cox_tmb_nr),
+  confint(cox_tmb_nr)
+))
+```
+
+```{r}
+cox.zph(cox_tmb_nr)
+```
+
+However, when fitting the continuous Cox model separately within responders (`df_r`) and non-responders (`df_nr`), the 95% confidence intervals include $1$ in both subsets. This indicates no statistically significant continuous association between $\log_2(\text{TMB} + 1)$ and overall survival within either response group alone, likely reflecting the small sample sizes and event counts per subgroup (as well as reduced contrast once stratified by response status), and therefore warrants cautious, exploratory interpretation rather than a definitive within-group conclusion.
+
+Within responders ($n = 61$: 50 high-TMB and 11 low-TMB), only 4 events occurred in total (2 per group), with the two events in the low-TMB group appearing earlier than the two events in the high-TMB group. Because event counts are so sparse - and the 95% CI already spans $1$ - the proportional hazards test (`cox.zph` $p = 0.038$) should be interpreted cautiously as a sign that the subgroup model is underpowered/unstable rather than a robust standalone finding.
+
+```{r}
+plot(cox.zph(cox_tmb_r))
+```
+
+
 ## TNB Survival Analysis
 
 ```{r}
@@ -345,3 +419,71 @@ km_plot(fit_tnb_nr,
 ```{r}
 table(df_tnb_nr$Best.Confirmed.Overall.Response, df_tnb_nr$TNB_Cutpoint_Group)
 ```
+
+### Hazard Ratio
+
+```{r}
+# Model TMB continuously; one unit is one doubling of TMB
+cox_tnb <- coxph(
+  Surv(os, censOS) ~ log2(Neoantigen.burden.per.MB+1),
+  data = clean_clinical_TNB
+)
+
+# Display the hazard ratio and 95% confidence interval
+exp(cbind(
+  HR = coef(cox_tnb),
+  confint(cox_tnb)
+))
+```
+
+```{r}
+# Display the complete Cox-model result
+summary(cox_tnb)
+```
+
+```{r}
+# Check the proportional-hazards assumption
+ph_tnb <- cox.zph(cox_tnb)
+ph_tnb
+```
+
+A continuous Cox proportional hazards model on $\log_2(\text{TNB} + 1)$ shows that higher neoantigen burden is associated with a substantially lower hazard of death and better overall survival ($\text{HR} = 0.51$, 95% CI: $0.39\text{--}0.69$), with no violation of the proportional hazards assumption ($p = 0.53$). While this points to a stronger per-unit protective association than observed for $\log_2(\text{TMB} + 1)$ ($\text{HR} = 0.75$), direct comparison should keep in mind differences in scale/transformation and cohort subsets between the TMB and TNB analyses.
+
+```{r}
+# Model TMB continuously; one unit is one doubling of TMB
+cox_tnb_r <- coxph(
+  Surv(os, censOS) ~ log2(Neoantigen.burden.per.MB+1),
+  data = df_tnb_r
+)
+
+# Display the hazard ratio and 95% confidence interval
+exp(cbind(
+  HR = coef(cox_tnb_r),
+  confint(cox_tnb_r)
+))
+```
+
+```{r}
+cox.zph(cox_tnb_r)
+```
+
+```{r}
+# Model TMB continuously; one unit is one doubling of TMB
+cox_tnb_nr <- coxph(
+  Surv(os, censOS) ~ log2(Neoantigen.burden.per.MB+1),
+  data = df_tnb_nr
+)
+
+# Display the hazard ratio and 95% confidence interval
+exp(cbind(
+  HR = coef(cox_tnb_nr),
+  confint(cox_tnb_nr)
+))
+```
+
+```{r}
+cox.zph(cox_tnb_nr)
+```
+
+The same pattern holds for neoantigen burden: when the continuous $\log_2(\text{TNB} + 1)$ Cox model is fit separately within responders and non-responders, the 95% confidence intervals again include $1$, underscoring that while overall survival benefits associate with higher burden across the cohort, smaller within-subgroup sample and event counts limit statistical precision within each response group alone.
+
