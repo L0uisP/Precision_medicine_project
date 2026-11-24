@@ -16,7 +16,7 @@ cpm-immunotherapy-project/
 │   ├── 02_RQ2_immune_related_signatures.qmd
 │   ├── 03_RQ3_biomarker_comparison.qmd
 │   ├── 04_RQ4_tumor_purity.qmd
-│   └── 05_RQ5_survivor_analysis.qmd
+│   └── 05_RQ5_survival_analysis.qmd
 └── results/
     
 ```
@@ -39,7 +39,7 @@ The RDS file contains three objects:
 | 02 | T-cell inflamed GEP score 
 | 03 | Biomarker comparison (PD-1, GEP, TMB) 
 | 04 | Tumor purity and confounding
-| 05 | Survivor analysis
+| 05 | Survival analysis
 
 ## Reference
 
