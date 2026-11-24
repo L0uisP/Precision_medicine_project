@@ -58,12 +58,9 @@ GEP_score_response |> head()
 To see if there is an effect we can make a regression model, or make a threshold and compare groups. We make a boxplot and histogram to see if there is are clear groups
 
 ```{r}
-GEP_score |> hist(breaks=16)
+GEP_score_response$GEP_score |> hist(breaks=16)
 ```
 
-```{r}
-GEP_score |> hist(breaks = 16)
-```
 
 From the ammount of outliers and a clear island in the histogram we conclude there is a meaningful grouping of high and low GEP scoring groups. The sizes of these groups are however very different, and that should be kept in mind whilst comparing
 
