@@ -1,14 +1,18 @@
 ---
-title: "01_RQ1_differential_expression"
+title: "RQ1: Differential expression in IMvigor210"
 author: "Lun Suša (s253705)"
 date: today
 format:
   html:
-    toc: true
+    embed-resources: true      # one self-contained HTML (images, CSS, JS inlined)
     theme: flatly
+    code-fold: true            # code hidden by default, click to show
+    code-tools: true           # "show all code" button
+    df-print: paged            
 execute:
   warning: false
   message: false
+  echo: true
 ---
 
 # RQ1 — Differential expression
@@ -23,8 +27,7 @@ library(DESeq2)
 library(fgsea)
 library(msigdbr)
 library(pheatmap)
-library(fgsea)
-library(msigdbr)
+
 
 # specify filter
 filter <- dplyr::filter
@@ -120,8 +123,8 @@ ggplot(res_df, aes(x = log2FoldChange, y = -log10(padj))) +
   geom_hline(yintercept = -log10(0.05), linetype = "dashed", color = "grey40") +
   scale_color_manual(
     name = NULL,
-    values = c("Higher in responders"     = "steelblue",
-               "Higher in non-responders" = "firebrick",
+    values = c("Higher in responders"     = "#00BFC4",
+               "Higher in non-responders" = "#F8766D",
                "Not significant"          = "grey80")
   ) +
   geom_text(data = top_labels, aes(label = gene),
@@ -249,8 +252,8 @@ ggplot(top_bar, aes(x = reorder(pathway_clean, NES), y = NES, fill = direction))
   geom_col() +
   coord_flip() +
   scale_fill_manual(name = NULL,
-                    values = c("Enriched in responders" = "steelblue",
-                               "Enriched in non-responders" = "firebrick")) +
+                    values = c("Enriched in responders" = "#00BFC4",
+                               "Enriched in non-responders" = "#F8766D")) +
   labs(x = "Pathway",
        y = "Normalized Enrichment Score (NES)",
        title = "Top 10 enriched GO pathways in each direction") +
@@ -266,20 +269,12 @@ topPathwaysUp   <- fgsea_res |> dplyr::filter(NES > 0) |> dplyr::arrange(pval) |
 topPathwaysDown <- fgsea_res |> dplyr::filter(NES < 0) |> dplyr::arrange(pval) |> head(10) |> dplyr::pull(pathway)
 topPathways <- c(topPathwaysUp, rev(topPathwaysDown))
 
-#| fig-width: 14
-#| fig-height: 10
-
-# Show in the doc
+# show in the doc
 plotGseaTable(gene_sets[topPathways], stats = ranked_genes,
               fgseaRes = fgsea_res, gseaParam = 0.5)
 
-# Save PDF
-pdf("../results/plots/RQ1_gsea_table.pdf", width = 20, height = 15)
-plotGseaTable(gene_sets[topPathways], stats = ranked_genes,
-              fgseaRes = fgsea_res, gseaParam = 0.5)
-dev.off()
 
-# Save PNG
+# save PNG
 png("../results/plots/RQ1_gsea_table.png", width = 20, height = 15, units = "in", res = 300)
 plotGseaTable(gene_sets[topPathways], stats = ranked_genes,
               fgseaRes = fgsea_res, gseaParam = 0.5)
@@ -310,22 +305,12 @@ fgsea_res[grepl("INTERFERON|T_CELL|ANTIGEN|IMMUNE_RESPONSE|LEUKOCYTE", pathway) 
 
 
 ```{r}
-top_up   <- fgsea_res[NES > 0][order(padj)][1, pathway]
-top_down <- fgsea_res[NES < 0][order(padj)][1, pathway]
-
-plotEnrichment(gene_sets[[top_up]], ranked_genes) +
-  labs(title = paste0(top_up, " (enriched in responders)"))
-
-plotEnrichment(gene_sets[[top_down]], ranked_genes) +
-  labs(title = paste0(top_down, " (enriched in non-responders)"))
-```
-```{r}
 
 plot_enrichment_curve <- function(pw, title = NULL) {
   pd  <- plotEnrichmentData(pathway = gene_sets[[pw]], stats = ranked_genes)
   row <- fgsea_res[fgsea_res$pathway == pw, ]
 
-  curve_col <- ifelse(row$NES > 0, "steelblue", "firebrick")
+  curve_col <- ifelse(row$NES > 0, "#00BFC4", "#F8766D")
   direction <- ifelse(row$NES > 0, "enriched in responders", "enriched in non-responders")
   if (is.null(title)) title <- pw |> str_remove("^GOBP_") |> str_replace_all("_", " ") |> str_to_sentence()
 
@@ -357,10 +342,13 @@ plot_enrichment_curve <- function(pw, title = NULL) {
 top_up   <- fgsea_res[NES > 0][order(padj)][1, pathway]
 top_down <- fgsea_res[NES < 0][order(padj)][1, pathway]
 
-plot_enrichment_curve(top_up)
-plot_enrichment_curve(top_down)
+p_up   <- plot_enrichment_curve(top_up)
+p_down <- plot_enrichment_curve(top_down)
+
+p_up    
+p_down
+
+ggsave("../results/plots/RQ1_enrichment_up.png",   p_up,   width = 9, height = 5, dpi = 300)
+ggsave("../results/plots/RQ1_enrichment_down.png", p_down, width = 9, height = 5, dpi = 300)
 ```
 
-### Limitations
-
-Discuss the limitations of the analysis, including potential confounding factors and why differential expression does not necessarily imply a causal role in treatment response.
