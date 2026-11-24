@@ -127,7 +127,7 @@ plot_association <- function(data, x, y, x_label, y_label, cor_test, title = NUL
 }
 ```
 
-## 1. Extract baseline biomarkers (RQ2 & RQ3 reference)
+## 1. Extract baseline biomarkers (RQ2 & RQ3 reference, not the scope of RQ4)
 
 We first extract `TMB`, `PDCD1` expression, and compute the 18-gene T cell–inflamed GEP score as the sample-wise mean of gene-wise z-scores across the expression matrix.
 
@@ -188,31 +188,32 @@ GEP_Response_test
 ```{r}
 #| label: plot-Response-biomarkers
 
-p_tmb <- plot_Response_boxplot(
-  data = df,
-  variable = "TMB",
-  y_label = "Tumor Mutational Burden (counts)",
-  test_result = TMB_Response_test
-)
+# p_tmb <- plot_Response_boxplot(
+#   data = df,
+#   variable = "TMB",
+#   y_label = "Tumor Mutational Burden (counts)",
+#   test_result = TMB_Response_test
+# )
+# 
+# p_pd1 <- plot_Response_boxplot(
+#   data = df,
+#   variable = "PD1",
+#   y_label = "PD-1 (PDCD1) Expression",
+#   test_result = PD1_Response_test
+# )
+# 
+# p_gep <- plot_Response_boxplot(
+#   data = df,
+#   variable = "GEP_scores",
+#   y_label = "T cell-inflamed GEP Score",
+#   test_result = GEP_Response_test
+# )
+# 
+# p_tmb 
+# p_pd1 
+# p_gep
 
-p_pd1 <- plot_Response_boxplot(
-  data = df,
-  variable = "PD1",
-  y_label = "PD-1 (PDCD1) Expression",
-  test_result = PD1_Response_test
-)
-
-p_gep <- plot_Response_boxplot(
-  data = df,
-  variable = "GEP_scores",
-  y_label = "T cell-inflamed GEP Score",
-  test_result = GEP_Response_test
-)
-
-p_tmb 
-p_pd1 
-p_gep
-
+# should not be included in fact, redundant I think?
 ```
 
 ## 2. Estimate tumor purity
@@ -382,39 +383,26 @@ plot_Response_boxplot(
 ```{r}
 #| label: summary-table
 
+fmt_p <- function(p) ifelse(is.na(p), "—", formatC(p, format = "e", digits = 2))
+
 summary_tbl <- data.frame(
-  Biomarker = c("TMB", "PDCD1 (PD-1)", "T cell-inflamed GEP", "Tumor purity (ESTIMATE)"),
-  Spearman_rho_with_purity = c(
-    round(unname(TMB_purity_cor$estimate), 3),
-    round(unname(PD1_purity_cor$estimate), 3),
-    round(unname(GEP_purity_cor$estimate), 3),
-    1.000
-  ),
-  Purity_cor_p = c(
-    signif(TMB_purity_cor$p.value, 3),
-    signif(PD1_purity_cor$p.value, 3),
-    signif(GEP_purity_cor$p.value, 3),
-    NA
-  ),
-  Unadjusted_BOR_p = c(
-    signif(TMB_Response_test$p.value, 3),
-    signif(PD1_Response_test$p.value, 3),
-    signif(GEP_Response_test$p.value, 3),
-    signif(purity_Response_test$p.value, 3)
-  ),
-  Purity_adjusted_BOR_p = c(
-    NA,
-    signif(PD1_Response_adjusted_test$p.value, 3),
-    signif(GEP_Response_adjusted_test$p.value, 3),
-    NA
-  )
+  Biomarker = c("TMB", "PDCD1 (PD-1)", "T cell–inflamed GEP", "Tumor purity (ESTIMATE)"),
+  Rho       = c("0.12", "-0.69", "-0.77", "—"),
+  P_cor     = fmt_p(c(TMB_purity_cor$p.value, PD1_purity_cor$p.value, GEP_purity_cor$p.value, NA)),
+  P_unadj   = fmt_p(c(TMB_Response_test$p.value, PD1_Response_test$p.value, GEP_Response_test$p.value, purity_Response_test$p.value)),
+  P_adj     = fmt_p(c(NA, PD1_Response_adjusted_test$p.value, GEP_Response_adjusted_test$p.value, NA))
 )
 
-kable(summary_tbl, caption = "Summary of biomarker associations with tumor purity and treatment response (BOR) before and after purity adjustment.")
+knitr::kable(
+  summary_tbl,
+  format = "pipe",
+  col.names = c("Biomarker", "Spearman ρ", "Purity cor. p", "Unadjusted BOR p", "Purity-adjusted BOR p"),
+  align = "lcccc"
+)
 ```
 
 ## 6. Discussion and interpretation
 
--   **How tumor purity influences bulk RNA-seq biomarkers:** Bulk RNA-seq measures an average expression profile across malignant, immune, and stromal cells. Because `PDCD1` and the 18-gene GEP primarily reflect infiltrating T cells and IFN-$\gamma$–driven immune activity, higher tumor purity dilutes immune transcripts, typically producing a strong negative correlation between estimated purity and immune biomarker levels. In contrast, TMB is derived from somatic mutations in tumor DNA rather than immune-cell RNA, so its relationship with purity behaves differently (though very low purity can reduce variant-calling sensitivity for subclonal mutations).
--   **Impact on RQ2 and RQ3 associations:** I have to check their results
+-   **How tumor purity influences bulk RNA-seq biomarkers:** Bulk RNA-seq measures an average expression profile across malignant, immune, and stromal cells. Because `PDCD1` and the 18-gene GEP primarily reflect infiltrating T cells and IFN-$\gamma$–driven immune activity, higher tumor purity dilutes immune transcripts, typically producing a strong negative correlation between estimated purity and immune biomarker levels. In contrast, TMB is derived from somatic mutations in tumor DNA rather than immune-cell RNA, so its relationship with purity behaves differently.
+-   **Impact on RQ2 and RQ3 associations:** I have to check their results, but if they also found an association: both remain significantly associated with treatment response after regressing out purity ($p = 1.60 \times 10^{-3}$ and $p = 2.78 \times 10^{-5}$), while purity itself does not differ between responders and non-responders ($p = 0.179$). This shows that the associations found in RQ2 and RQ3 are not just an artifact of bulk immune-cell dilution, but reflect actual differences in T-cell activation.
 -   **Should we adjust for tumor purity?** Not automatically. Unlike a technical batch effect, cellular composition in the tumor microenvironment is a core biological determinant of anti-PD-L1 efficacy. Regressing out tumor purity removes genuine biological signal (the presence of infiltrating T cells) and changes the scientific question from *"Does total immune infiltration/activation associate with response?"* to *"Does residual immune gene expression beyond bulk cellular composition associate with response?"*.
