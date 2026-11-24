@@ -87,9 +87,7 @@ Tightening the threshold removes 40% of the hits but the FDR is lover, will cont
 
 No outliers and low count genes because the low expression filter was already applied in the preparation. Responders have more downregulated genes.
 
-
 ## Visualisation
-
 
 ```{r}
 
@@ -122,8 +120,8 @@ ggplot(res_df, aes(x = log2FoldChange, y = -log10(padj))) +
   geom_hline(yintercept = -log10(0.05), linetype = "dashed", color = "grey40") +
   scale_color_manual(
     name = NULL,
-    values = c("Higher in responders"     = "firebrick",
-               "Higher in non-responders" = "steelblue",
+    values = c("Higher in responders"     = "steelblue",
+               "Higher in non-responders" = "firebrick",
                "Not significant"          = "grey80")
   ) +
   geom_text(data = top_labels, aes(label = gene),
@@ -133,10 +131,10 @@ ggplot(res_df, aes(x = log2FoldChange, y = -log10(padj))) +
        title = "Volcano plot: complete response vs progressive disease") +
   theme_minimal()
 
-ggsave("../results/RQ1_volcano.png", width = 8, height = 6, dpi = 300)
+ggsave("../results/plots/RQ1_volcano.png", width = 8, height = 6, dpi = 300)
 ```
 
-456 genes are significant at padj < 0.05: 167 higher in responders and 289 higher in non-responders.\
+456 genes are significant at padj \< 0.05: 167 higher in responders and 289 higher in non-responders.\
 
 Genes in the top-right corner (large positive log2FC, very small padj) are strongly and confidently upregulated in complete responders.\
 Genes in the top-left corner (large negative log2FC, very small padj) are strongly upregulated in patients with progressive disease.\
@@ -147,7 +145,6 @@ Points near the bottom are not statistically significant, even when the fold cha
 colnames(meta)                       # look for biopsy site / liver metastasis columns
 res_df |> filter(gene %in% top_labels$gene) |> select(gene, log2FoldChange, padj)
 ```
-
 
 ```{r}
 
@@ -184,14 +181,13 @@ ph <- pheatmap(vsd_mat[top_genes, sample_order],
                main = "Top 30 DE genes: R vs NR")
 
 # save a copy to file
-png("../results/RQ1_heatmap.png", width = 9, height = 8, units = "in", res = 300)
+png("../results/plots/RQ1_heatmap.png", width = 9, height = 8, units = "in", res = 300)
 grid::grid.newpage()
 grid::grid.draw(ph$gtable)
 dev.off()
 ```
+
 vertical stripes of very high expression across the liver-type genes (ALB, FGB, AHSG, ORM2, ALDOB)!!
-
-
 
 ## GSEA
 
@@ -211,6 +207,7 @@ length(ranked_genes)
 head(sort(ranked_genes, decreasing = TRUE))
 head(sort(ranked_genes))
 ```
+
 ```{r}
 
 # fgsea against MSigDB gene sets
@@ -226,7 +223,6 @@ fgsea_res <- fgsea(pathways = gene_sets,
                    nPermSimple = 10000)
 ```
 
-
 ```{r}
 # How many pathways are significant, and in which direction?
 sum(fgsea_res$padj < 0.05, na.rm = TRUE)
@@ -234,10 +230,10 @@ sum(fgsea_res$padj < 0.05 & fgsea_res$NES > 0, na.rm = TRUE)   # enriched in res
 sum(fgsea_res$padj < 0.05 & fgsea_res$NES < 0, na.rm = TRUE)   # enriched in non-responders
 sum(is.na(fgsea_res$padj))                                      # pathways with NA p-values
 ```
-7,538 GO Biological Process gene sets were tested, and 1,223 are significant at padj < 0.05 (about 16%)\
+
+7,538 GO Biological Process gene sets were tested, and 1,223 are significant at padj \< 0.05 (about 16%)\
 459 have a positive NES, meaning they are enriched among genes higher in complete responders. 764 have a negative NES, meaning they are enriched among genes higher in non-responders (progressive disease)\
 No pathways returned NA p-values.\
-
 
 ### GSEA visualisation
 
@@ -253,16 +249,18 @@ ggplot(top_bar, aes(x = reorder(pathway_clean, NES), y = NES, fill = direction))
   geom_col() +
   coord_flip() +
   scale_fill_manual(name = NULL,
-                    values = c("Enriched in responders" = "firebrick",
-                               "Enriched in non-responders" = "steelblue")) +
+                    values = c("Enriched in responders" = "steelblue",
+                               "Enriched in non-responders" = "firebrick")) +
   labs(x = "Pathway",
        y = "Normalized Enrichment Score (NES)",
        title = "Top 10 enriched GO pathways in each direction") +
   theme_minimal()
 ```
+
+#### PATHWAYS
+
 ```{r}
 # table plots 
-
 
 topPathwaysUp   <- fgsea_res |> dplyr::filter(NES > 0) |> dplyr::arrange(pval) |> head(10) |> dplyr::pull(pathway)
 topPathwaysDown <- fgsea_res |> dplyr::filter(NES < 0) |> dplyr::arrange(pval) |> head(10) |> dplyr::pull(pathway)
@@ -276,18 +274,92 @@ plotGseaTable(gene_sets[topPathways], stats = ranked_genes,
               fgseaRes = fgsea_res, gseaParam = 0.5)
 
 # Save PDF
-pdf("../results/RQ1_gsea_table.pdf", width = 20, height = 15)
+pdf("../results/plots/RQ1_gsea_table.pdf", width = 20, height = 15)
 plotGseaTable(gene_sets[topPathways], stats = ranked_genes,
               fgseaRes = fgsea_res, gseaParam = 0.5)
 dev.off()
 
 # Save PNG
-png("../results/RQ1_gsea_table.png", width = 20, height = 15, units = "in", res = 300)
+png("../results/plots/RQ1_gsea_table.png", width = 20, height = 15, units = "in", res = 300)
 plotGseaTable(gene_sets[topPathways], stats = ranked_genes,
               fgseaRes = fgsea_res, gseaParam = 0.5)
 dev.off()
+
+topPathwaysUp
+topPathwaysDown
+```
+```{r}
+
+set.seed(42)
+collapsed <- collapsePathways(fgsea_res[order(pval)][pval < 0.05],
+                              gene_sets, ranked_genes)
+
+length(collapsed$mainPathways)
+
+mainPathways <- fgsea_res[pathway %in% collapsed$mainPathways][order(-NES)]
+
+mainPathways[NES > 0][order(padj)][1:10, .(pathway, NES, padj, size)]
+mainPathways[NES < 0][order(padj)][1:10, .(pathway, NES, padj, size)]
 ```
 
+immune pathways??
+```{r}
+fgsea_res[grepl("INTERFERON|T_CELL|ANTIGEN|IMMUNE_RESPONSE|LEUKOCYTE", pathway) & padj < 0.05][
+  order(padj)][1:15, .(pathway, NES, padj, size)]
+```
+
+
+```{r}
+top_up   <- fgsea_res[NES > 0][order(padj)][1, pathway]
+top_down <- fgsea_res[NES < 0][order(padj)][1, pathway]
+
+plotEnrichment(gene_sets[[top_up]], ranked_genes) +
+  labs(title = paste0(top_up, " (enriched in responders)"))
+
+plotEnrichment(gene_sets[[top_down]], ranked_genes) +
+  labs(title = paste0(top_down, " (enriched in non-responders)"))
+```
+```{r}
+
+plot_enrichment_curve <- function(pw, title = NULL) {
+  pd  <- plotEnrichmentData(pathway = gene_sets[[pw]], stats = ranked_genes)
+  row <- fgsea_res[fgsea_res$pathway == pw, ]
+
+  curve_col <- ifelse(row$NES > 0, "steelblue", "firebrick")
+  direction <- ifelse(row$NES > 0, "enriched in responders", "enriched in non-responders")
+  if (is.null(title)) title <- pw |> str_remove("^GOBP_") |> str_replace_all("_", " ") |> str_to_sentence()
+
+  ggplot(pd$curve, aes(x = rank, y = ES)) +
+    geom_hline(yintercept = 0, color = "grey60") +
+    geom_hline(yintercept = c(pd$posES, pd$negES), linetype = "dashed", color = "grey75") +
+    geom_line(color = curve_col, linewidth = 1.1) +
+    geom_segment(
+      data = pd$ticks,
+      aes(x = rank, xend = rank, y = -pd$spreadES / 20, yend = pd$spreadES / 20),
+      linewidth = 0.3, color = "grey30"
+    ) +
+    scale_x_continuous(
+      name = "Gene rank  (\u2190 higher in responders  |  higher in non-responders \u2192)",
+      labels = scales::comma
+    ) +
+    scale_y_continuous(name = "Enrichment score (ES)") +
+    labs(
+      title = title,
+      subtitle = sprintf("GO BP: NES = %.2f, padj = %.1e (%s)", row$NES, row$padj, direction)
+    ) +
+    theme_classic(base_size = 13) +
+    theme(
+      plot.title = element_text(face = "bold"),
+      plot.subtitle = element_text(color = "grey35")
+    )
+}
+
+top_up   <- fgsea_res[NES > 0][order(padj)][1, pathway]
+top_down <- fgsea_res[NES < 0][order(padj)][1, pathway]
+
+plot_enrichment_curve(top_up)
+plot_enrichment_curve(top_down)
+```
 
 ### Limitations
 
