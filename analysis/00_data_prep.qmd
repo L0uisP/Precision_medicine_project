@@ -2,7 +2,7 @@
 title: "Data Preparation — IMvigor210"
 author: "Lun Suša (s253705), 
         Rasmus Bertelsen (s235350), 
-        Maxence Marbouty"
+        Maxence Marbouty (s253730)"
 date: today
 format:
   html:
@@ -23,7 +23,7 @@ Second, it prepares the `cds` object from the Mariathasan et al. (2018) cohort f
 # DATA PREPRATION
 
 | Field | Meaning |
-|------------------------------------|------------------------------------|
+|----|----|
 | `counts` | Raw RNAseq counts |
 | `TPM` | Normalized data |
 | `pat_id` | Anonymized patient identifier (e.g. SAM7f0d9cc7f001) |
@@ -36,7 +36,7 @@ Second, it prepares the `cds` object from the Mariathasan et al. (2018) cohort f
 ## Dataset overview
 
 | Field | Meaning |
-|------------------------------------|------------------------------------|
+|----|----|
 | `counts` | Raw RNAseq counts |
 | `TPM` | Normalized data |
 | `pat_id` | Anonymized patient identifier (e.g. SAM7f0d9cc7f001) |

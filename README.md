@@ -18,7 +18,7 @@ cpm-immunotherapy-project/
 │   ├── 04_RQ4_tumor_purity.qmd
 │   └── 05_RQ5_survivor_analysis.qmd
 ├── scripts/
-│   └── utils.R                  # helper functions (if neded?)
+│   └── utils.R                  # helper functions (if needed?)
 └── results/
     
 ```
