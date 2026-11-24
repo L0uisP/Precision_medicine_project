@@ -16,7 +16,7 @@ execute:
 
 ## Overview
 
-This notebook prepares the IMvigor210 dataset for all downstream analyses. First, it loads the raw RNA-seq data, filters lowly expressed genes (removing genes with fewer than 10 counts in fewer than 10 samples while verifying key genes such as *PDCD1*, *IFNG*, *IFNGR1*, *TGFB1*, and *TGFBR2* remain present), and runs DESeq2 normalization, saving the result to `data/processed/imvigor210_prepared.rds` for RQ1–RQ4.
+This notebook prepares the IMvigor210 dataset for all downstream analyses. First, it loads the raw RNA-seq data, filters lowly expressed genes (removing genes with 10 counts or less in fewer than 10 samples while verifying key genes such as *PDCD1*, *IFNG*, *IFNGR1*, *TGFB1*, and *TGFBR2* remain present), and runs DESeq2 normalization, saving the result to `data/processed/imvigor210_prepared.rds` for RQ1–RQ4.
 
 Second, it prepares the `cds` object from the Mariathasan et al. (2018) cohort for survival analysis by extracting clinical metadata, counts, and gene annotations, defining responder groups (`CR`/`PR` vs. `SD`/`PD`), inspecting missingness across TMB (`FMOne.mutation.burden.per.MB`) and TNB (`Neoantigen.burden.per.MB`), and creating biomarker-specific subsets.
 
@@ -46,8 +46,6 @@ Second, it prepares the `cds` object from the Mariathasan et al. (2018) cohort f
 
 ## Load libraries
 
-## Load libraries
-
 ```{r}
 library(DESeq2)
 library(tidyverse)
@@ -57,7 +55,13 @@ library(tidyverse)
 
 ```{r}
 d <- readRDS("../data/IMvigor210_plain.rds")
+
+# d is a list holding d$counts (genes × samples raw count matrix), 
+# d$tpm (normalized expression)
+# d$clinical (one row per sample)
 ```
+
+OR
 
 ## Load data (from the server)
 
@@ -76,7 +80,8 @@ sum(is.na(d$clinical$TMB))
 ## Filter low-expressed genes
 
 ```{r}
-keep <- rowSums(d$counts > 10) >= 10
+keep <- rowSums(d$counts > 10) >= 10 # true/false mask: true when genes exceed 10 counts in at least 10 samples 
+                                    
 counts_filtered <- d$counts[keep, ]
 cat("Genes before filtering:", nrow(d$counts), "\n")
 cat("Genes after filtering:", nrow(counts_filtered), "\n")
@@ -85,29 +90,43 @@ saveRDS(counts_filtered,"../data/processed/filtered_counts.rds")
 
 ## Sanity check key genes
 
+(taken from the paper)
+
 ```{r}
 key_genes <- c("PDCD1", "IFNG", "IFNGR1", "TGFB1", "TGFBR2")
 key_genes %in% rownames(counts_filtered)
 ```
 
+#### FILTERING INFO
+
+Genes before filtering: 31,087\
+Genes kept: 18,226. This removed 12,861 genes (41%)\
+10 samples ≈ 5% of the cohort and \< size of smallest group (25 responders)\
+
 ## Create DESeqDataSet
 
 ```{r}
+# build DESeq object: counts, metdata, 
+#         statistical model to compare expression between responders and non-responders
 dds <- DESeqDataSetFromMatrix(
   countData = counts_filtered,
   colData   = d$clinical,
   design    = ~ BOR
 )
+
+# estimates size factors + gene-wise dispersions -> for DESeq analysis
 dds <- DESeq(dds)
 ```
 
 ## Save prepared data
 
+s
+
 ```{r}
 saveRDS(list(
-  dds      = dds,
-  tpm      = d$tpm[keep, ],
-  clinical = d$clinical
+  dds      = dds,             # DESeq obj
+  tpm      = d$tpm[keep, ],   # TPM with onlz kept genes
+  clinical = d$clinical      # clinical data
 ), "../data/processed/imvigor210_prepared.rds")
 ```
 
@@ -115,8 +134,8 @@ saveRDS(list(
 
 This section prepares the `cds` object from the Mariathasan et al. (2018) IMvigor210 cohort for overall survival (`os`, `censOS`) analyses stratified by response and mutational/neoantigen burden.
 
--   **`FMOne.mutation.burden.per.MB` (TMB):** Mutations per megabase from the targeted FoundationOne panel.
--   **`Neoantigen.burden.per.MB` (TNB):** Neoantigen burden per megabase derived from whole-exome sequencing (WES).
+- **`FMOne.mutation.burden.per.MB` (TMB):** Mutations per megabase from the targeted FoundationOne panel.
+- **`Neoantigen.burden.per.MB` (TNB):** Neoantigen burden per megabase derived from whole-exome sequencing (WES).
 
 ```{r}
 library(dplyr)

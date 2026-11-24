@@ -11,144 +11,284 @@ execute:
   message: false
 ---
 
-
 # RQ1 — Differential expression
 
 Which genes are differentially expressed between patients with complete response and patients with progressive disease following anti-PD-L1 treatment?
 
-### Load data and packages
+### Load packages
 
 ```{r}
 library(tidyverse)
 library(DESeq2)
 library(fgsea)
 library(msigdbr)
-library(dplyr)
-library(tidyr)
 library(pheatmap)
+library(fgsea)
+library(msigdbr)
 
-# Load prepared data
+# specify filter
+filter <- dplyr::filter
+```
+
+## Data exploration
+
+```{r}
 prepared <- readRDS("../data/processed/imvigor210_prepared.rds")
+
+dds  <- prepared$dds
+meta <- as.data.frame(colData(dds))
+
+# size of the data
+dim(counts(dds))            # genes x samples
+
+# what groups exist, and how many samples in each
+table(meta$BOR, useNA = "ifany")
+
+# are counts and metadata in the same order
+all(colnames(counts(dds)) == rownames(meta))
+
+
+
 ```
 
+This shows that the count matrix has 18,226 genes × 192 samples after running the low-expression filter from the preparation notebook (genes with more than 10 counts in at least 10 samples). There are 25 complete response (R) and 167 progressive disease (non responders?) (NR), with no missing values. This is an extremely unbalanced representation and reduces statistical power!!
 
-### DESeq2 analysis
-Differential expression analysis between responders/non-responder using DESeq2, and identify significantly differentially expressed genes.
+## Fitted model, DE genes
+
+DESeq was already done during data preparation, so now I just have to check it. It did size-factor normalization, dispersion estimation, Wald test for BOR.
 
 ```{r}
-dds <- prepared$dds
-dds
-```
-```{r}
-# Extract results (NR is reference, positive LFC = higher in R)
-res <- results(dds, alpha = 0.05)
+dds <- prepared$dds 
+
+levels(factor(dds$BOR)) # NR is the reference
+resultsNames(dds)
+summary(sizeFactors(dds))
+
+res <- results(dds) # default
 summary(res)
+
+res_sig <- results(dds, alpha = 0.05) # stricter
+summary(res_sig)
 ```
+
+NR is the reference: log2fold change:\
+positive -\> higher expression in complete responders\
+negative -\> higher expression in progressive disease
+
+**Size factors**\
+0.26 to 1.95 (median 1.03)\
+centered near 1, so normalization worked, a few samples have lower sequencing depth\
+
+**Results**\
+- alpha = 0.1: 290 were up (1.6%) and 491 down (2.7%) in responders, 781 in total\
+- alpha = 0.05, 167 were up (0.92%) and 289 down (1.6%), 456 in total\
+
+Tightening the threshold removes 40% of the hits but the FDR is lover, will continue with this.\
+
+No outliers and low count genes because the low expression filter was already applied in the preparation. Responders have more downregulated genes.
+
+
+## Visualisation
+
+
 ```{r}
-# Rank genes for GSEA
+
+# DESeq results to dataframe for ggplot
+res_df <- as_tibble(res_sig, rownames = "gene") |>
+  # should not be any genes without padj but just in case
+  drop_na(padj, log2FoldChange) |>
+  mutate(
+    group = case_when( # label by significance
+      padj < 0.05 & log2FoldChange > 0 ~ "Higher in responders",
+      padj < 0.05 & log2FoldChange < 0 ~ "Higher in non-responders",
+      TRUE ~ "Not significant"
+    )
+  )
+
+# check counts
+table(res_df$group)
+
+# label 10 most significant genes on the plot
+top_labels <- res_df |>
+  filter(group != "Not significant") |>
+  slice_min(padj, n = 10)
+
+# who are they
+top_labels$gene
+
+ggplot(res_df, aes(x = log2FoldChange, y = -log10(padj))) +
+  geom_point(aes(color = group), alpha = 0.6) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed", color = "grey40") +
+  scale_color_manual(
+    name = NULL,
+    values = c("Higher in responders"     = "firebrick",
+               "Higher in non-responders" = "steelblue",
+               "Not significant"          = "grey80")
+  ) +
+  geom_text(data = top_labels, aes(label = gene),
+            size = 3, vjust = -0.6, check_overlap = TRUE) +
+  labs(x = "Log2 Fold Change (R vs NR)",
+       y = "-Log10 Adjusted P-value",
+       title = "Volcano plot: complete response vs progressive disease") +
+  theme_minimal()
+
+ggsave("../results/RQ1_volcano.png", width = 8, height = 6, dpi = 300)
+```
+
+456 genes are significant at padj < 0.05: 167 higher in responders and 289 higher in non-responders.\
+
+Genes in the top-right corner (large positive log2FC, very small padj) are strongly and confidently upregulated in complete responders.\
+Genes in the top-left corner (large negative log2FC, very small padj) are strongly upregulated in patients with progressive disease.\
+Points near the bottom are not statistically significant, even when the fold change looks large. Points near the middle are significant but have small effect sizes.\
+
+```{r}
+# check metadata about the top genes
+colnames(meta)                       # look for biopsy site / liver metastasis columns
+res_df |> filter(gene %in% top_labels$gene) |> select(gene, log2FoldChange, padj)
+```
+
+
+```{r}
+
+# variance-stabilized counts (same model/normalization as the DE test)
+vsd     <- vst(dds, blind = FALSE)
+vsd_mat <- assay(vsd)
+
+# top 15 genes in each direction, by adjusted p-value
+top_up   <- res_df |> dplyr::filter(group == "Higher in responders") |>
+  slice_min(padj, n = 15) |> pull(gene)
+top_down <- res_df |> dplyr::filter(group == "Higher in non-responders") |>
+  slice_min(padj, n = 15) |> pull(gene)
+top_genes <- c(top_up, top_down)
+
+# annotations (rownames must match the heatmap's column / row names)
+annotation_col <- data.frame(BOR = colData(dds)$BOR,
+                             row.names = colnames(vsd_mat))
+annotation_row <- data.frame(
+  Direction = rep(c("Higher in R", "Higher in NR"),
+                  c(length(top_up), length(top_down))),
+  row.names = top_genes)
+
+# heatmap, samples ordered by response group
+sample_order <- order(colData(dds)$BOR)
+
+ph <- pheatmap(vsd_mat[top_genes, sample_order],
+               annotation_col = annotation_col,
+               annotation_row = annotation_row,
+               scale = "row",
+               cluster_rows = TRUE,
+               cluster_cols = FALSE,
+               show_colnames = FALSE,
+               breaks = seq(-3, 3, length.out = 101),
+               main = "Top 30 DE genes: R vs NR")
+
+# save a copy to file
+png("../results/RQ1_heatmap.png", width = 9, height = 8, units = "in", res = 300)
+grid::grid.newpage()
+grid::grid.draw(ph$gtable)
+dev.off()
+```
+vertical stripes of very high expression across the liver-type genes (ALB, FGB, AHSG, ORM2, ALDOB)!!
+
+
+
+## GSEA
+
+```{r}
+# Rank genes by Wald statistic
 ranked_genes <- res$stat
 names(ranked_genes) <- rownames(res)
+
+# remove NA statistics and genes with empty or missing names
 ranked_genes <- ranked_genes[!is.na(ranked_genes)]
+ranked_genes <- ranked_genes[!is.na(names(ranked_genes)) & names(ranked_genes) != ""]
 
-# remove empty string names
-ranked_genes <- ranked_genes[names(ranked_genes) != ""]
+# check for duplicated gene names
+sum(duplicated(names(ranked_genes)))
+
+length(ranked_genes)
+head(sort(ranked_genes, decreasing = TRUE))
+head(sort(ranked_genes))
 ```
-
 ```{r}
-# GSEA with MSigDB GO Biological Process
+
+# fgsea against MSigDB gene sets
+
 gene_sets <- msigdbr(species = "Homo sapiens", collection = "C5", subcollection = "BP")
 gene_sets <- split(x = gene_sets$gene_symbol, f = gene_sets$gs_name)
 
+length(gene_sets)
+
 set.seed(42)
-fgsea_res <- fgsea(pathways = gene_sets, stats = ranked_genes, nPermSimple = 10000)
-```
-
-```{r}
-# Look at top results
-fgsea_res |>
-  arrange(padj) |>
-  head(20)
-```
-
-```{r}
-# Top upregulated pathways in responders (positive NES)
-fgsea_res |>
-  filter(padj < 0.05, NES > 0) |>
-  arrange(padj) |>
-  head(10)
-```
-
-```{r}
-# Top downregulated pathways in responders (negative NES)
-fgsea_res |>
-  filter(padj < 0.05, NES < 0) |>
-  arrange(padj) |>
-  head(10)
+fgsea_res <- fgsea(pathways = gene_sets,
+                   stats = ranked_genes,
+                   nPermSimple = 10000)
 ```
 
 
-### Results & interpretation
+```{r}
+# How many pathways are significant, and in which direction?
+sum(fgsea_res$padj < 0.05, na.rm = TRUE)
+sum(fgsea_res$padj < 0.05 & fgsea_res$NES > 0, na.rm = TRUE)   # enriched in responders
+sum(fgsea_res$padj < 0.05 & fgsea_res$NES < 0, na.rm = TRUE)   # enriched in non-responders
+sum(is.na(fgsea_res$padj))                                      # pathways with NA p-values
+```
+7,538 GO Biological Process gene sets were tested, and 1,223 are significant at padj < 0.05 (about 16%)\
+459 have a positive NES, meaning they are enriched among genes higher in complete responders. 764 have a negative NES, meaning they are enriched among genes higher in non-responders (progressive disease)\
+No pathways returned NA p-values.\
 
 
-Visualize the results using e.g. volcano plots and heatmaps of selected genes.
-Investigate the biological functions of differentially expressed genes and discuss their potential relevance to immunotherapy response.
+### GSEA visualisation
 
 ```{r}
-# Volcano plot
-res_df <- as.data.frame(res) |>
-  mutate(significant = padj < 0.05 & !is.na(padj))
+top_bar <- bind_rows(
+  fgsea_res |> dplyr::filter(NES > 0) |> dplyr::arrange(padj) |> head(10),
+  fgsea_res |> dplyr::filter(NES < 0) |> dplyr::arrange(padj) |> head(10)
+) |>
+  mutate(pathway_clean = str_remove(pathway, "^GOBP_") |> str_replace_all("_", " "),
+         direction = ifelse(NES > 0, "Enriched in responders", "Enriched in non-responders"))
 
-ggplot(res_df, aes(x = log2FoldChange, y = -log10(padj), color = significant)) +
-  geom_point() +
-  scale_color_manual(values = c("grey", "limegreen")) +
-  labs(x = "Log2 Fold Change", y = "-Log10 Adjusted P-value",
-       title = "Differential expression: R vs NR") +
+ggplot(top_bar, aes(x = reorder(pathway_clean, NES), y = NES, fill = direction)) +
+  geom_col() +
+  coord_flip() +
+  scale_fill_manual(name = NULL,
+                    values = c("Enriched in responders" = "firebrick",
+                               "Enriched in non-responders" = "steelblue")) +
+  labs(x = "Pathway",
+       y = "Normalized Enrichment Score (NES)",
+       title = "Top 10 enriched GO pathways in each direction") +
   theme_minimal()
 ```
 ```{r}
+# table plots 
 
-# Get top 30 significant DEGs by adjusted p-value
-top_genes <- as.data.frame(res) |>
-  filter(!is.na(padj), padj < 0.05, abs(log2FoldChange) > 1) |>
-  arrange(padj) |>
-  head(30)
 
-# Extract TPM values for top genes
-tpm_matrix <- prepared$tpm[rownames(top_genes), ]
+topPathwaysUp   <- fgsea_res |> dplyr::filter(NES > 0) |> dplyr::arrange(pval) |> head(10) |> dplyr::pull(pathway)
+topPathwaysDown <- fgsea_res |> dplyr::filter(NES < 0) |> dplyr::arrange(pval) |> head(10) |> dplyr::pull(pathway)
+topPathways <- c(topPathwaysUp, rev(topPathwaysDown))
 
-# Log transform for visualization
-tpm_log <- log2(tpm_matrix + 1)
+#| fig-width: 14
+#| fig-height: 10
 
-# Annotation for columns (samples)
-annotation <- data.frame(BOR = prepared$clinical$BOR)
-rownames(annotation) <- colnames(tpm_log)
+# Show in the doc
+plotGseaTable(gene_sets[topPathways], stats = ranked_genes,
+              fgseaRes = fgsea_res, gseaParam = 0.5)
 
-# Plot
-pheatmap(tpm_log,
-         annotation_col = annotation,
-         show_rownames = TRUE,
-         show_colnames = FALSE,
-         scale = "row",
-         clustering_method = "complete",
-         main = "Top 30 DEGs: R vs NR")
+# Save PDF
+pdf("../results/RQ1_gsea_table.pdf", width = 20, height = 15)
+plotGseaTable(gene_sets[topPathways], stats = ranked_genes,
+              fgseaRes = fgsea_res, gseaParam = 0.5)
+dev.off()
+
+# Save PNG
+png("../results/RQ1_gsea_table.png", width = 20, height = 15, units = "in", res = 300)
+plotGseaTable(gene_sets[topPathways], stats = ranked_genes,
+              fgseaRes = fgsea_res, gseaParam = 0.5)
+dev.off()
 ```
-```{r}
-# Order samples by BOR
-sample_order <- order(prepared$clinical$BOR)
 
-pheatmap(tpm_log[, sample_order],
-         annotation_col = annotation,
-         show_rownames = TRUE,
-         show_colnames = FALSE,
-         scale = "row",
-         cluster_cols = FALSE,
-         breaks = seq(-3, 3, length.out = 101),
-         main = "Top 30 DEGs: R vs NR")
-```
 
 ### Limitations
 
 Discuss the limitations of the analysis, including potential confounding factors and why differential expression does not necessarily imply a causal role in treatment response.
-
-
-
