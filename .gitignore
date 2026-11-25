@@ -13,7 +13,6 @@ data/
 
 # Rendered output
 *_files/
-*.html
 *.pdf
 
 # Quarto cache

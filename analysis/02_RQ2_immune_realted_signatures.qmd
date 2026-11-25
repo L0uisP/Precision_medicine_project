@@ -1,15 +1,18 @@
 ---
 title: "02_RQ2_immune_realted_signatures"
-format: html
 author: "Rasmus Bertelsen (s235350)"
 date: today
 format:
   html:
-    toc: true
+    embed-resources: true      # one self-contained HTML (images, CSS, JS inlined)
     theme: flatly
+    code-fold: true            # code hidden by default, click to show
+    code-tools: true           # "show all code" button
+    df-print: paged            
 execute:
   warning: false
   message: false
+  echo: true
 ---
 
 Are 18-gene T-cell–inflamed GEP associated with treatment response?
@@ -58,9 +61,21 @@ GEP_score_response |> head()
 To see if there is an effect we can make a regression model, or make a threshold and compare groups. We make a boxplot and histogram to see if there is are clear groups
 
 ```{r}
-GEP_score_response$GEP_score |> hist(breaks=16)
-```
+GEP_hist <- ggplot(GEP_score_response, aes(x = GEP_score)) +
+  geom_histogram(
+    bins = 16,
+    fill = "darkgrey",
+  ) +
+  labs(
+    title = "Distribution of GEP scores",
+    x = "GEP-score",
+    y = "Frequency"
+  ) 
 
+ggsave('../results/plots/RQ2_Histogram_GEP.png', GEP_hist)
+GEP_hist
+
+```
 
 From the ammount of outliers and a clear island in the histogram we conclude there is a meaningful grouping of high and low GEP scoring groups. The sizes of these groups are however very different, and that should be kept in mind whilst comparing
 
@@ -71,9 +86,9 @@ wilcox_test
 
 ```{r}
 plot_Response_boxplot <- function(data, variable, y_label, test_result) {
-  ggplot(data, aes(x = BOR, y = .data[[variable]])) +
-    geom_boxplot(outlier.shape = NA) +
-    geom_jitter(width = 0.12, alpha = 0.6) +
+  ggplot(data, aes(x = BOR, y = .data[[variable]], fill = BOR)) +
+    geom_boxplot(outlier.shape = NA, alpha = 0.5) +
+    geom_jitter(aes(color = BOR), width = 0.12, alpha = 1) +
     annotate(
       "text",
       x = Inf, y = Inf,
@@ -84,7 +99,17 @@ plot_Response_boxplot <- function(data, variable, y_label, test_result) {
       x = "Response class",
       y = y_label
     ) +
-    theme_minimal()
+    theme_minimal() +
+    theme(legend.position = "none")
 }
-plot_Response_boxplot(GEP_score_response, "GEP_score", "T cell-inflamed GEP score", wilcox_test)
+Responseplot <- plot_Response_boxplot(GEP_score_response, "GEP_score", "T cell-inflamed GEP score", wilcox_test)
+ggsave('../results/plots/RQ2_response_GEP.png', Responseplot)
+Responseplot
+```
+
+Export results and analysis for dowstream steps
+
+```{r}
+GEP_score_response |> saveRDS('../data/processed/RQ2_GEP_scores_with_meta.rds')
+
 ```
