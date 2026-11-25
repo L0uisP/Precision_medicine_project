@@ -23,9 +23,12 @@ library(tidyverse)
 library(survminer)
 ```
 
-Set working directory and load the dataset.
+Set working directory, create output plot directory, and load the dataset.
 
 ```{r}
+plot_dir <- "../results/plot"
+dir.create(plot_dir, recursive = TRUE, showWarnings = FALSE)
+
 clean_clinical_TMB <- readRDS("data/processed/clean_clinical_TMB.rds")
 clean_clinical_TNB <- readRDS("data/processed/clean_clinical_TNB.rds")
 
@@ -78,27 +81,51 @@ Several variable to check : PD vs SD, R vs NR, IC level, TMB, TNB, TC level, ...
 Begin by inspecting TMB distribution to find a good cut-off point.
 
 ```{r}
-ggplot(clean_clinical_TMB, 
-       aes(x= FMOne.mutation.burden.per.MB)) + 
+p_tmb_dist <- ggplot(
+  clean_clinical_TMB,
+  aes(x = FMOne.mutation.burden.per.MB)
+) +
   geom_histogram() +
-  theme_minimal()+
+  theme_minimal() +
   labs(title = "TMB Distribution")
+
+print(p_tmb_dist)
+
+ggsave(
+  filename = file.path(plot_dir, "distribution_TMB.png"),
+  plot = p_tmb_dist,
+  width = 7,
+  height = 5,
+  dpi = 300
+)
 ```
 
 Looks like a Negative binomiale distribution, thus taking median value would create imbalanced groups.
 
 ```{r}
-ggplot(clean_clinical_TMB, 
-       aes(x= log(FMOne.mutation.burden.per.MB+1))) + 
+p_tmb_log_dist <- ggplot(
+  clean_clinical_TMB,
+  aes(x = log(FMOne.mutation.burden.per.MB + 1))
+) +
   geom_histogram() +
-  theme_minimal()+
+  theme_minimal() +
   labs(title = "TMB Distribution")
+
+print(p_tmb_log_dist)
+
+ggsave(
+  filename = file.path(plot_dir, "distribution_TMB_log.png"),
+  plot = p_tmb_log_dist,
+  width = 7,
+  height = 5,
+  dpi = 300
+)
 ```
 
 ### Whole cohort
 
 ```{r}
-#Find the optimal cutpoint for TMB against overall survival
+# Find the optimal cutpoint for TMB against overall survival
 cut_tmb <- surv_cutpoint(
   data = clean_clinical_TMB,
   time = "os",
@@ -108,15 +135,26 @@ cut_tmb <- surv_cutpoint(
 )
 
 summary(cut_tmb)
+
+png(
+  filename = file.path(plot_dir, "cutpoint_TMB.png"),
+  width = 7,
+  height = 5,
+  units = "in",
+  res = 300
+)
+plot(cut_tmb, "FMOne.mutation.burden.per.MB", palette = "npg")
+dev.off()
+
 plot(cut_tmb, "FMOne.mutation.burden.per.MB", palette = "npg")
 
-#Categorize patients into High vs. Low TMB using the cutpoint
+# Categorize patients into High vs. Low TMB using the cutpoint
 cat_tmb <- surv_categorize(cut_tmb)
 ```
 
 ```{r}
 # Add the new factor column back to your clinical data frame
-clean_clinical_TMB <- clean_clinical_TMB |> 
+clean_clinical_TMB <- clean_clinical_TMB |>
   mutate(TMB_Cutpoint_Group = cat_tmb$FMOne.mutation.burden.per.MB)
 
 table(clean_clinical_TMB$TMB_Cutpoint_Group)
@@ -126,15 +164,27 @@ fit_tmb <- survfit(Surv(os, censOS) ~ TMB_Cutpoint_Group,
 lr_tmb <- survdiff(Surv(os, censOS) ~ TMB_Cutpoint_Group,
                    data = clean_clinical_TMB)
 
-km_plot(fit_tmb,
-        "Survival analysis stratified by TMB",
-        lr_p(lr_tmb))
+p_km_tmb <- km_plot(
+  fit_tmb,
+  "Survival analysis stratified by TMB",
+  lr_p(lr_tmb)
+)
+
+print(p_km_tmb)
+
+ggsave(
+  filename = file.path(plot_dir, "km_survival_TMB.png"),
+  plot = p_km_tmb,
+  width = 7,
+  height = 6,
+  dpi = 300
+)
 ```
 
 ### Stratified by responder/non responder
 
 ```{r}
-df_r <- clean_clinical_TMB |> 
+df_r <- clean_clinical_TMB |>
   filter(Responder_Group == "R")
 
 cut_tmb_r <- surv_cutpoint(
@@ -146,16 +196,27 @@ cut_tmb_r <- surv_cutpoint(
 )
 
 summary(cut_tmb_r)
+
+png(
+  filename = file.path(plot_dir, "cutpoint_TMB_responders.png"),
+  width = 7,
+  height = 5,
+  units = "in",
+  res = 300
+)
+plot(cut_tmb_r, "FMOne.mutation.burden.per.MB", palette = "npg")
+dev.off()
+
 plot(cut_tmb_r, "FMOne.mutation.burden.per.MB", palette = "npg")
 
 cat_tmb_r <- surv_categorize(cut_tmb_r)
 
-df_r <- df_r |> 
+df_r <- df_r |>
   mutate(TMB_Cutpoint_Group = cat_tmb_r$FMOne.mutation.burden.per.MB)
 ```
 
 ```{r}
-df_nr <- clean_clinical_TMB |> 
+df_nr <- clean_clinical_TMB |>
   filter(Responder_Group == "NR")
 
 cut_tmb_nr <- surv_cutpoint(
@@ -167,11 +228,22 @@ cut_tmb_nr <- surv_cutpoint(
 )
 
 summary(cut_tmb_nr)
+
+png(
+  filename = file.path(plot_dir, "cutpoint_TMB_nonresponders.png"),
+  width = 7,
+  height = 5,
+  units = "in",
+  res = 300
+)
+plot(cut_tmb_nr, "FMOne.mutation.burden.per.MB", palette = "npg")
+dev.off()
+
 plot(cut_tmb_nr, "FMOne.mutation.burden.per.MB", palette = "npg")
 
 cat_tmb_nr <- surv_categorize(cut_tmb_nr)
 
-df_nr <- df_nr |> 
+df_nr <- df_nr |>
   mutate(TMB_Cutpoint_Group = cat_tmb_nr$FMOne.mutation.burden.per.MB)
 ```
 
@@ -189,9 +261,21 @@ fit_tmb_r <- survfit(Surv(os, censOS) ~ TMB_Cutpoint_Group,
 lr_tmb_r <- survdiff(Surv(os, censOS) ~ TMB_Cutpoint_Group,
                    data = df_r)
 
-km_plot(fit_tmb_r,
-        "Survival analysis stratified by TMB for the Responder Group",
-        lr_p(lr_tmb_r))
+p_km_tmb_r <- km_plot(
+  fit_tmb_r,
+  "Survival analysis stratified by TMB for the Responder Group",
+  lr_p(lr_tmb_r)
+)
+
+print(p_km_tmb_r)
+
+ggsave(
+  filename = file.path(plot_dir, "km_survival_TMB_responders.png"),
+  plot = p_km_tmb_r,
+  width = 7,
+  height = 6,
+  dpi = 300
+)
 ```
 
 ```{r}
@@ -200,9 +284,21 @@ fit_tmb_nr <- survfit(Surv(os, censOS) ~ TMB_Cutpoint_Group,
 lr_tmb_nr <- survdiff(Surv(os, censOS) ~ TMB_Cutpoint_Group,
                      data = df_nr)
 
-km_plot(fit_tmb_nr,
-        "Survival analysis stratified by TMB for the Non-Responder Group",
-        lr_p(lr_tmb_nr))
+p_km_tmb_nr <- km_plot(
+  fit_tmb_nr,
+  "Survival analysis stratified by TMB for the Non-Responder Group",
+  lr_p(lr_tmb_nr)
+)
+
+print(p_km_tmb_nr)
+
+ggsave(
+  filename = file.path(plot_dir, "km_survival_TMB_nonresponders.png"),
+  plot = p_km_tmb_nr,
+  width = 7,
+  height = 6,
+  dpi = 300
+)
 ```
 
 ```{r}
@@ -214,7 +310,7 @@ table(df_nr$Best.Confirmed.Overall.Response, df_nr$TMB_Cutpoint_Group)
 ```{r}
 # Model TMB continuously; one unit is one doubling of TMB
 cox_tmb <- coxph(
-  Surv(os, censOS) ~ log2(FMOne.mutation.burden.per.MB+1),
+  Surv(os, censOS) ~ log2(FMOne.mutation.burden.per.MB + 1),
   data = clean_clinical_TMB
 )
 
@@ -241,7 +337,7 @@ A continuous Cox proportional hazards model on $\log_2(\text{TMB} + 1)$ shows th
 ```{r}
 # Model TMB continuously; one unit is one doubling of TMB
 cox_tmb_r <- coxph(
-  Surv(os, censOS) ~ log2(FMOne.mutation.burden.per.MB+1),
+  Surv(os, censOS) ~ log2(FMOne.mutation.burden.per.MB + 1),
   data = df_r
 )
 
@@ -259,7 +355,7 @@ cox.zph(cox_tmb_r)
 ```{r}
 # Model TMB continuously; one unit is one doubling of TMB
 cox_tmb_nr <- coxph(
-  Surv(os, censOS) ~ log2(FMOne.mutation.burden.per.MB+1),
+  Surv(os, censOS) ~ log2(FMOne.mutation.burden.per.MB + 1),
   data = df_nr
 )
 
@@ -279,31 +375,67 @@ However, when fitting the continuous Cox model separately within responders (`df
 Within responders ($n = 61$: 50 high-TMB and 11 low-TMB), only 4 events occurred in total (2 per group), with the two events in the low-TMB group appearing earlier than the two events in the high-TMB group. Because event counts are so sparse - and the 95% CI already spans $1$ - the proportional hazards test (`cox.zph` $p = 0.038$) should be interpreted cautiously as a sign that the subgroup model is underpowered/unstable rather than a robust standalone finding.
 
 ```{r}
-plot(cox.zph(cox_tmb_r))
+zph_tmb_r <- cox.zph(cox_tmb_r)
+
+png(
+  filename = file.path(plot_dir, "zph_TMB_responders.png"),
+  width = 7,
+  height = 5,
+  units = "in",
+  res = 300
+)
+plot(zph_tmb_r)
+dev.off()
+
+plot(zph_tmb_r)
 ```
 
 ## TNB Survival Analysis
 
 ```{r}
-ggplot(clean_clinical_TNB, 
-       aes(x= Neoantigen.burden.per.MB)) + 
+p_tnb_dist <- ggplot(
+  clean_clinical_TNB,
+  aes(x = Neoantigen.burden.per.MB)
+) +
   geom_histogram() +
-  theme_minimal()+
+  theme_minimal() +
   labs(title = "TNB Distribution")
+
+print(p_tnb_dist)
+
+ggsave(
+  filename = file.path(plot_dir, "distribution_TNB.png"),
+  plot = p_tnb_dist,
+  width = 7,
+  height = 5,
+  dpi = 300
+)
 ```
 
 ```{r}
-ggplot(clean_clinical_TNB, 
-       aes(x= log(Neoantigen.burden.per.MB+1))) + 
+p_tnb_log_dist <- ggplot(
+  clean_clinical_TNB,
+  aes(x = log(Neoantigen.burden.per.MB + 1))
+) +
   geom_histogram() +
-  theme_minimal()+
+  theme_minimal() +
   labs(title = "TNB Distribution")
+
+print(p_tnb_log_dist)
+
+ggsave(
+  filename = file.path(plot_dir, "distribution_TNB_log.png"),
+  plot = p_tnb_log_dist,
+  width = 7,
+  height = 5,
+  dpi = 300
+)
 ```
 
 ### Whole cohort
 
 ```{r}
-#Find the optimal cutpoint for TNB against overall survival
+# Find the optimal cutpoint for TNB against overall survival
 cut_tnb <- surv_cutpoint(
   data = clean_clinical_TNB,
   time = "os",
@@ -313,34 +445,56 @@ cut_tnb <- surv_cutpoint(
 )
 
 summary(cut_tnb)
+
+png(
+  filename = file.path(plot_dir, "cutpoint_TNB.png"),
+  width = 7,
+  height = 5,
+  units = "in",
+  res = 300
+)
+plot(cut_tnb, "Neoantigen.burden.per.MB", palette = "npg")
+dev.off()
+
 plot(cut_tnb, "Neoantigen.burden.per.MB", palette = "npg")
 
-#Categorize patients into High vs. Low TMB using the cutpoint
+# Categorize patients into High vs. Low TMB using the cutpoint
 cat_tnb <- surv_categorize(cut_tnb)
-
 ```
 
 ```{r}
 # Add the new factor column back to your clinical data frame
-clean_clinical_TNB <- clean_clinical_TNB |> 
+clean_clinical_TNB <- clean_clinical_TNB |>
   mutate(TNB_Cutpoint_Group = cat_tnb$Neoantigen.burden.per.MB)
 
 table(clean_clinical_TNB$TNB_Cutpoint_Group)
 
-fit_tnb <- survfit(Surv(os, censOS) ~ TNB_Cutpoint_Group, 
+fit_tnb <- survfit(Surv(os, censOS) ~ TNB_Cutpoint_Group,
                    data = clean_clinical_TNB)
-lr_tnb <- survdiff(Surv(os, censOS) ~ TNB_Cutpoint_Group, 
+lr_tnb <- survdiff(Surv(os, censOS) ~ TNB_Cutpoint_Group,
                    data = clean_clinical_TNB)
 
-km_plot(fit_tnb, 
-        "Survival analysis stratified by TNB", 
-        lr_p(lr_tnb))
+p_km_tnb <- km_plot(
+  fit_tnb,
+  "Survival analysis stratified by TNB",
+  lr_p(lr_tnb)
+)
+
+print(p_km_tnb)
+
+ggsave(
+  filename = file.path(plot_dir, "km_survival_TNB.png"),
+  plot = p_km_tnb,
+  width = 7,
+  height = 6,
+  dpi = 300
+)
 ```
 
 ### Stratified by responder/non responder
 
 ```{r}
-df_tnb_r <- clean_clinical_TNB |> 
+df_tnb_r <- clean_clinical_TNB |>
   filter(Responder_Group == "R")
 
 cut_tnb_r <- surv_cutpoint(
@@ -352,16 +506,27 @@ cut_tnb_r <- surv_cutpoint(
 )
 
 summary(cut_tnb_r)
+
+png(
+  filename = file.path(plot_dir, "cutpoint_TNB_responders.png"),
+  width = 7,
+  height = 5,
+  units = "in",
+  res = 300
+)
+plot(cut_tnb_r, "Neoantigen.burden.per.MB", palette = "npg")
+dev.off()
+
 plot(cut_tnb_r, "Neoantigen.burden.per.MB", palette = "npg")
 
 cat_tnb_r <- surv_categorize(cut_tnb_r)
 
-df_tnb_r <- df_tnb_r |> 
+df_tnb_r <- df_tnb_r |>
   mutate(TNB_Cutpoint_Group = cat_tnb_r$Neoantigen.burden.per.MB)
 ```
 
 ```{r}
-df_tnb_nr <- clean_clinical_TNB |> 
+df_tnb_nr <- clean_clinical_TNB |>
   filter(Responder_Group == "NR")
 
 cut_tnb_nr <- surv_cutpoint(
@@ -373,11 +538,22 @@ cut_tnb_nr <- surv_cutpoint(
 )
 
 summary(cut_tnb_nr)
+
+png(
+  filename = file.path(plot_dir, "cutpoint_TNB_nonresponders.png"),
+  width = 7,
+  height = 5,
+  units = "in",
+  res = 300
+)
+plot(cut_tnb_nr, "Neoantigen.burden.per.MB", palette = "npg")
+dev.off()
+
 plot(cut_tnb_nr, "Neoantigen.burden.per.MB", palette = "npg")
 
 cat_tnb_nr <- surv_categorize(cut_tnb_nr)
 
-df_tnb_nr <- df_tnb_nr |> 
+df_tnb_nr <- df_tnb_nr |>
   mutate(TNB_Cutpoint_Group = cat_tnb_nr$Neoantigen.burden.per.MB)
 ```
 
@@ -395,9 +571,21 @@ fit_tnb_r <- survfit(Surv(os, censOS) ~ TNB_Cutpoint_Group,
 lr_tnb_r <- survdiff(Surv(os, censOS) ~ TNB_Cutpoint_Group,
                    data = df_tnb_r)
 
-km_plot(fit_tnb_r,
-        "Survival analysis stratified by TNB for the Responder Group",
-        lr_p(lr_tnb_r))
+p_km_tnb_r <- km_plot(
+  fit_tnb_r,
+  "Survival analysis stratified by TNB for the Responder Group",
+  lr_p(lr_tnb_r)
+)
+
+print(p_km_tnb_r)
+
+ggsave(
+  filename = file.path(plot_dir, "km_survival_TNB_responders.png"),
+  plot = p_km_tnb_r,
+  width = 7,
+  height = 6,
+  dpi = 300
+)
 ```
 
 ```{r}
@@ -410,9 +598,21 @@ fit_tnb_nr <- survfit(Surv(os, censOS) ~ TNB_Cutpoint_Group,
 lr_tnb_nr <- survdiff(Surv(os, censOS) ~ TNB_Cutpoint_Group,
                      data = df_tnb_nr)
 
-km_plot(fit_tnb_nr,
-        "Survival analysis stratified by TNB for the Non-Responder Group",
-        lr_p(lr_tnb_nr))
+p_km_tnb_nr <- km_plot(
+  fit_tnb_nr,
+  "Survival analysis stratified by TNB for the Non-Responder Group",
+  lr_p(lr_tnb_nr)
+)
+
+print(p_km_tnb_nr)
+
+ggsave(
+  filename = file.path(plot_dir, "km_survival_TNB_nonresponders.png"),
+  plot = p_km_tnb_nr,
+  width = 7,
+  height = 6,
+  dpi = 300
+)
 ```
 
 ```{r}
@@ -424,7 +624,7 @@ table(df_tnb_nr$Best.Confirmed.Overall.Response, df_tnb_nr$TNB_Cutpoint_Group)
 ```{r}
 # Model TMB continuously; one unit is one doubling of TMB
 cox_tnb <- coxph(
-  Surv(os, censOS) ~ log2(Neoantigen.burden.per.MB+1),
+  Surv(os, censOS) ~ log2(Neoantigen.burden.per.MB + 1),
   data = clean_clinical_TNB
 )
 
@@ -451,7 +651,7 @@ A continuous Cox proportional hazards model on $\log_2(\text{TNB} + 1)$ shows th
 ```{r}
 # Model TMB continuously; one unit is one doubling of TMB
 cox_tnb_r <- coxph(
-  Surv(os, censOS) ~ log2(Neoantigen.burden.per.MB+1),
+  Surv(os, censOS) ~ log2(Neoantigen.burden.per.MB + 1),
   data = df_tnb_r
 )
 
@@ -469,7 +669,7 @@ cox.zph(cox_tnb_r)
 ```{r}
 # Model TMB continuously; one unit is one doubling of TMB
 cox_tnb_nr <- coxph(
-  Surv(os, censOS) ~ log2(Neoantigen.burden.per.MB+1),
+  Surv(os, censOS) ~ log2(Neoantigen.burden.per.MB + 1),
   data = df_tnb_nr
 )
 
