@@ -1,7 +1,18 @@
 ---
-title: "Survival_Analysis_IMVigor"
-format: html
-editor: visual
+title: "05_RQ5_survival_analysis"
+author: "Louis Page (s253705)"
+date: today
+format:
+  html:
+    embed-resources: true      
+    theme: flatly
+    code-fold: true           
+    code-tools: true           
+    df-print: paged            
+execute:
+  warning: false
+  message: false
+  echo: true
 ---
 
 ## Project Survival Analysis exploration

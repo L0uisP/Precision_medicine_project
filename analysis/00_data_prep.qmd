@@ -2,16 +2,22 @@
 title: "Data Preparation — IMvigor210"
 author: "Lun Suša (s253705), 
         Rasmus Bertelsen (s235350), 
-        Maxence Marbouty (s253730)"
+        Maxence Marbouty (s253730),
+        Louis PAge (s253729),
+        Henrique Gomes (s253710)"
 date: today
 format:
   html:
-    toc: true
-    code-fold: true
+    embed-resources: true      
     theme: flatly
+    code-fold: true            # code hidden by default, click to show
+    code-tools: true           # "show all code" button
+    df-print: paged            
 execute:
   warning: false
   message: false
+  echo: true
+  eval: false
 ---
 
 ## Overview
@@ -19,19 +25,6 @@ execute:
 This notebook prepares the IMvigor210 dataset for all downstream analyses. First, it loads the raw RNA-seq data, filters lowly expressed genes (removing genes with 10 counts or less in fewer than 10 samples while verifying key genes such as *PDCD1*, *IFNG*, *IFNGR1*, *TGFB1*, and *TGFBR2* remain present), and runs DESeq2 normalization, saving the result to `data/processed/imvigor210_prepared.rds` for RQ1–RQ4.
 
 Second, it prepares the `cds` object from the Mariathasan et al. (2018) cohort for survival analysis by extracting clinical metadata, counts, and gene annotations, defining responder groups (`CR`/`PR` vs. `SD`/`PD`), inspecting missingness across TMB (`FMOne.mutation.burden.per.MB`) and TNB (`Neoantigen.burden.per.MB`), and creating biomarker-specific subsets.
-
-# DATA PREPRATION
-
-| Field | Meaning |
-|----|----|
-| `counts` | Raw RNAseq counts |
-| `TPM` | Normalized data |
-| `pat_id` | Anonymized patient identifier (e.g. SAM7f0d9cc7f001) |
-| `BOR` | Treatment response: R = complete response, NR = progressive disease |
-| `TMB` | Tumor mutational burden (mut/Mb); NA = missing, not zero |
-| `sample_id` | Identifier aligned to expression matrix columns; duplicates `pat_id` here |
-
-# Data Preparation
 
 ## Dataset overview
 

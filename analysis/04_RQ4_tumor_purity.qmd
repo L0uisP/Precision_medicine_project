@@ -1,14 +1,18 @@
 ---
-title: "04_"
+title: "04_RQ4_tumor_purity"
+author: "Maxence Marbouty (s253730)"
 date: today
 format:
   html:
-    toc: true
-    code-fold: true
+    embed-resources: true      
     theme: flatly
+    code-fold: true           
+    code-tools: true           
+    df-print: paged            
 execute:
   warning: false
   message: false
+  echo: true
 ---
 
 ## Overview
