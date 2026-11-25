@@ -16,12 +16,17 @@ execute:
 
 # Loading Libraries
 library(tidyverse)
-library(DESeq2)
 
 # Loading Data
 data <- readRDS("../data/processed/imvigor210_prepared.rds")
 expr <- data$tpm
 metadata <- data$clinical
+
+# Output directories
+plot_dir <- "../results/plots"
+dir.create(plot_dir, recursive = TRUE, showWarnings = FALSE)
+outdata_dir <- "../data/processed"
+dir.create(outdata_dir, recursive = TRUE, showWarnings = FALSE)
 ```
 
 ```{r}
@@ -41,7 +46,6 @@ table(metadata$BOR, useNA = "ifany")
 ```
 
 ```{r}
-
 #| label: extract-tmb-pd1
 
 # Tumor mutational burden
@@ -58,36 +62,18 @@ summary(PD1)
 ```
 
 ```{r}
+#| label: load-gep
 
-#| label: calculate-gep
+GEP_data <- readRDS("../data/processed/RQ2_GEP_scores.rds")
 
-GEP_genes <- c(
-  "CD27", "CD274", "PDCD1", "CD276",
-  "CD8A", "CMKLR1", "CXCL9", "CXCR6",
-  "HLA-DQA1", "HLA-DRB1", "HLA-E",
-  "IDO1", "LAG3", "NKG7", "PDCD1LG2",
-  "PSMB10", "STAT1", "TIGIT"
-)
+stopifnot(!anyDuplicated(GEP_data$pat_id))
+stopifnot(all(metadata$pat_id %in% GEP_data$pat_id))
 
-# Check which genes are present
-GEP_genes_present <- GEP_genes[GEP_genes %in% rownames(expr)]
-GEP_genes_missing <- setdiff(GEP_genes, rownames(expr))
+GEP_scores <- GEP_data$GEP_score[
+  match(metadata$pat_id, GEP_data$pat_id)
+]
 
-cat("GEP genes present:", length(GEP_genes_present), "\n")
-cat("Missing genes:", paste(GEP_genes_missing, collapse = ", "), "\n")
-
-# Extract and log-transform the available GEP genes
-GEP_expr <- log2(
-  expr[GEP_genes_present, , drop = FALSE] + 1
-)
-
-# Standardize each gene across patients
-GEP_expr_scaled <- t(scale(t(GEP_expr)))
-
-# Calculate one GEP score per patient
-GEP_scores <- colMeans(GEP_expr_scaled, na.rm = TRUE)
-
-summary(GEP_scores)
+stopifnot(!anyNA(GEP_scores))
 ```
 
 ```{r}
@@ -104,6 +90,12 @@ df <- data.frame(
 
 stopifnot(identical(df$sample, colnames(expr)))
 
+# Save biomarker data for RQ4
+saveRDS(
+  df,
+  file = file.path(outdata_dir, "RQ3_biomarker_data.rds")
+)
+
 # Tests
 TMB_test <- wilcox.test(TMB ~ BOR, data = df, exact = FALSE)
 PD1_test <- wilcox.test(PD1 ~ BOR, data = df, exact = FALSE)
@@ -112,13 +104,34 @@ GEP_test <- wilcox.test(GEP_scores ~ BOR, data = df, exact = FALSE)
 TMB_test
 PD1_test
 GEP_test
+
+# Save Wilcoxon test results
+wilcoxon_results <- data.frame(
+  Biomarker = c("TMB", "PDCD1", "T-cell GEP"),
+  W = c(
+    unname(TMB_test$statistic),
+    unname(PD1_test$statistic),
+    unname(GEP_test$statistic)
+  ),
+  p_value = c(
+    TMB_test$p.value,
+    PD1_test$p.value,
+    GEP_test$p.value
+  )
+)
+
+write.csv(
+  wilcoxon_results,
+  file.path(outdata_dir, "RQ3_wilcoxon_results.csv"),
+  row.names = FALSE
+)
 ```
 
 ```{r}
 #| label: plot-response-biomarkers
 
 plot_Response_boxplot <- function(data, variable, y_label, test_result) {
-  ggplot(data, aes(x = BOR, y = .data[[variable]])) +
+  ggplot(data, aes(x = BOR, y = .data[[variable]], fill = BOR)) +
     geom_boxplot(outlier.shape = NA) +
     geom_jitter(width = 0.12, alpha = 0.6) +
     annotate(
@@ -137,45 +150,86 @@ plot_Response_boxplot <- function(data, variable, y_label, test_result) {
 
 ```{r}
 #| label: TMB-distribution-plot
-plot_Response_boxplot(
+
+TMB_plot <- plot_Response_boxplot(
   df,
   "TMB",
   "Tumor mutational burden (mut/Mb)",
   TMB_test
 )
+
+ggsave(
+  filename = file.path(plot_dir, "RQ3_TMB_distribution_boxplot.png"),
+  plot = TMB_plot,
+  width = 6,
+  height = 4,
+  dpi = 300
+)
+
+TMB_plot
 ```
 
 ```{r}
 #| label: PDCD1-expression-distribution-plot
 
-plot_Response_boxplot(
+PD1_plot <- plot_Response_boxplot(
   df,
   "PD1",
-  "PDCD1 expression",
+  "PDCD1 expression (log2(TPM + 1))",
   PD1_test
 )
+
+ggsave(
+  filename = file.path(plot_dir, "RQ3_PDCD1_distribution_boxplot.png"),
+  plot = PD1_plot,
+  width = 6,
+  height = 4,
+  dpi = 300
+)
+
+PD1_plot
 ```
 
 ```{r}
 #| label: T-cell-inflamed-GEP-distribution-plot
 
-plot_Response_boxplot(
+GEP_plot <- plot_Response_boxplot(
   df,
   "GEP_scores",
   "T-cell-inflamed GEP score",
   GEP_test
 )
+
+ggsave(
+  filename = file.path(plot_dir, "RQ3_GEP_distribution_boxplot.png"),
+  plot = GEP_plot,
+  width = 7,
+  height = 6,
+  dpi = 300
+)
+
+GEP_plot
 ```
 
 ```{r}
 #| label: compare-biomarkers
 
-df |>
+biomarker_summary <- df |>
   group_by(BOR) |>
   summarise(
     n = n(),
+    n_TMB = sum(!is.na(TMB)),
     median_TMB = median(TMB, na.rm = TRUE),
     median_PD1 = median(PD1, na.rm = TRUE),
-    median_GEP = median(GEP_scores, na.rm = TRUE)
+    median_GEP = median(GEP_scores, na.rm = TRUE),
+    .groups = "drop"
   )
+
+write.csv(
+  biomarker_summary,
+  file.path(outdata_dir, "RQ3_biomarker_summary.csv"),
+  row.names = FALSE
+)
+
+biomarker_summary
 ```
