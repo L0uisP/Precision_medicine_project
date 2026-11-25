@@ -15,8 +15,6 @@ execute:
   echo: true
 ---
 
-# RQ1 — Differential expression
-
 Which genes are differentially expressed between patients with complete response and patients with progressive disease following anti-PD-L1 treatment?
 
 ### Load packages
@@ -42,13 +40,15 @@ dds  <- prepared$dds
 meta <- as.data.frame(colData(dds))
 
 # size of the data
-dim(counts(dds))            # genes x samples
+cat("Genes x samples:", dim(counts(dds)), "\n")         
 
 # what groups exist, and how many samples in each
-table(meta$BOR, useNA = "ifany")
+cat("Samples per group (BOR):")
+print(table(meta$BOR, useNA = "ifany"))
 
 # are counts and metadata in the same order
-all(colnames(counts(dds)) == rownames(meta))
+cat("Count matrix columns match metadata rows:",
+    all(colnames(counts(dds)) == rownames(meta)))
 
 
 
@@ -58,10 +58,15 @@ This shows that the count matrix has 18,226 genes × 192 samples after running t
 
 ## Fitted model, DE genes
 
+```{r}
+design(dds)
+```
+
+**limitation**: model is not adjusted for TMB, sequencing depth (other than size factors), and where the samples were taken from
+
 DESeq was already done during data preparation, so now I just have to check it. It did size-factor normalization, dispersion estimation, Wald test for BOR.
 
 ```{r}
-dds <- prepared$dds 
 
 levels(factor(dds$BOR)) # NR is the reference
 resultsNames(dds)
@@ -82,13 +87,50 @@ negative -\> higher expression in progressive disease
 0.26 to 1.95 (median 1.03)\
 centered near 1, so normalization worked, a few samples have lower sequencing depth\
 
+```{r}
+
+# more about size factors 
+cat("Size factors by response group:\n")
+print(tapply(meta$sizeFactor, meta$BOR, summary))
+
+# plot
+ggplot(meta, aes(x = BOR, y = sizeFactor)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.15, alpha = 0.5) +
+  labs(x = "Response group (BOR)", y = "DESeq2 size factor",
+       title = "Size factors by response group")
+
+# test for a difference between groups
+wilcox.test(sizeFactor ~ BOR, data = meta)
+
+# which samples are the lowest, and what group are they in
+meta |>
+  arrange(sizeFactor) |>
+  select(sample_id, BOR, sizeFactor) |>
+  head(10)
+```
+Size factors are roughly the same in both groups and there is no significant difference between groups. And anyway, DESeq accounts for size factors.
+
 **Results**\
 - alpha = 0.1: 290 were up (1.6%) and 491 down (2.7%) in responders, 781 in total\
 - alpha = 0.05, 167 were up (0.92%) and 289 down (1.6%), 456 in total\
 
 Tightening the threshold removes 40% of the hits but the FDR is lover, will continue with this.\
 
-No outliers and low count genes because the low expression filter was already applied in the preparation. Responders have more downregulated genes.
+
+```{r}
+
+
+cat("Genes with replaced outlier counts (mcols replace == TRUE):",
+    sum(mcols(dds)$replace, na.rm = TRUE), "\n")
+
+# were any significant genes among the replaced ones?
+replaced_genes <- rownames(dds)[which(mcols(dds)$replace)]
+cat("Significant genes (padj < 0.05) with a replaced count:",
+    sum(res_sig$padj < 0.05 & rownames(res_sig) %in% replaced_genes, na.rm = TRUE), "\n")
+```
+
+this means a lot of genes were flagged as outliers and replaced by DESeq default replacement. That's why earlier it shows no outliers. Might be a limitation because so many of the significant genes just depend on replacement.
 
 ## Visualisation
 
@@ -144,21 +186,36 @@ Genes in the top-left corner (large negative log2FC, very small padj) are strong
 Points near the bottom are not statistically significant, even when the fold change looks large. Points near the middle are significant but have small effect sizes.\
 
 ```{r}
-# check metadata about the top genes
-colnames(meta)                       # look for biopsy site / liver metastasis columns
 res_df |> filter(gene %in% top_labels$gene) |> select(gene, log2FoldChange, padj)
 ```
+```{r}
+
+sig <- res_df |> 
+  filter(group != "Not significant")
+
+cat("Significant genes (padj < 0.05):", nrow(sig), "\n")
+for (t in c(0.5, 1, 1.5, 2)) {
+  cat("  with |log2FC| >", t, ":", sum(abs(sig$log2FoldChange) > t), "\n")
+}
+cat("Median |log2FC| among significant genes:",
+    round(median(abs(sig$log2FoldChange)), 2), "\n")
+
+```
+
+
 
 ```{r}
 
 # variance-stabilized counts (same model/normalization as the DE test)
-vsd     <- vst(dds, blind = FALSE)
+# transforms to log scale
+vsd <- vst(dds, blind = FALSE)
+# get matrix
 vsd_mat <- assay(vsd)
 
 # top 15 genes in each direction, by adjusted p-value
-top_up   <- res_df |> dplyr::filter(group == "Higher in responders") |>
+top_up   <- res_df |> filter(group == "Higher in responders") |>
   slice_min(padj, n = 15) |> pull(gene)
-top_down <- res_df |> dplyr::filter(group == "Higher in non-responders") |>
+top_down <- res_df |> filter(group == "Higher in non-responders") |>
   slice_min(padj, n = 15) |> pull(gene)
 top_genes <- c(top_up, top_down)
 
@@ -177,12 +234,13 @@ ph <- pheatmap(vsd_mat[top_genes, sample_order],
                annotation_col = annotation_col,
                annotation_row = annotation_row,
                scale = "row",
-               cluster_rows = TRUE,
+               cluster_rows = FALSE,
+               gaps_row = length(top_up),               
                cluster_cols = FALSE,
+               gaps_col = sum(colData(dds)$BOR == "NR"),  
                show_colnames = FALSE,
                breaks = seq(-3, 3, length.out = 101),
                main = "Top 30 DE genes: R vs NR")
-
 # save a copy to file
 png("../results/plots/RQ1_heatmap.png", width = 9, height = 8, units = "in", res = 300)
 grid::grid.newpage()
@@ -190,7 +248,30 @@ grid::grid.draw(ph$gtable)
 dev.off()
 ```
 
-vertical stripes of very high expression across the liver-type genes (ALB, FGB, AHSG, ORM2, ALDOB)!!
+
+```{r}
+# 15 biggest log2FC in each direction, among significant genes
+lfc_up   <- res_df |> filter(group == "Higher in responders") |>
+  slice_max(log2FoldChange, n = 15) |> pull(gene)
+lfc_down <- res_df |> filter(group == "Higher in non-responders") |>
+  slice_min(log2FoldChange, n = 15) |> pull(gene)
+lfc_genes <- c(lfc_up, lfc_down)
+
+annotation_row_lfc <- data.frame(
+  Direction = rep(c("Higher in R", "Higher in NR"), c(15, 15)),
+  row.names = lfc_genes)
+
+pheatmap(vsd_mat[lfc_genes, sample_order],
+         annotation_col = annotation_col,
+         annotation_row = annotation_row_lfc,
+         scale = "row",
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         show_colnames = FALSE,
+         breaks = seq(-3, 3, length.out = 101),
+         main = "Top 30 DE genes by log2FC")
+```
+
 
 ## GSEA
 
@@ -199,17 +280,23 @@ vertical stripes of very high expression across the liver-type genes (ALB, FGB, 
 ranked_genes <- res$stat
 names(ranked_genes) <- rownames(res)
 
-# remove NA statistics and genes with empty or missing names
+# remove NA statistics and genes with empty or missing names 
 ranked_genes <- ranked_genes[!is.na(ranked_genes)]
 ranked_genes <- ranked_genes[!is.na(names(ranked_genes)) & names(ranked_genes) != ""]
 
 # check for duplicated gene names
 sum(duplicated(names(ranked_genes)))
 
-length(ranked_genes)
-head(sort(ranked_genes, decreasing = TRUE))
-head(sort(ranked_genes))
+cat("Genes in ranked list:", length(ranked_genes), "\n")
+
+cat("Top 6 genes higher in responders (highest Wald stat):\n")
+print(round(head(sort(ranked_genes, decreasing = TRUE)), 2))
+
+cat("Top 6 genes higher in non-responders (lowest Wald stat):\n")
+print(round(head(sort(ranked_genes)), 2))
 ```
+One gene got removed because it did not have a name. 
+
 
 ```{r}
 
@@ -227,16 +314,25 @@ fgsea_res <- fgsea(pathways = gene_sets,
 ```
 
 ```{r}
-# How many pathways are significant, and in which direction?
-sum(fgsea_res$padj < 0.05, na.rm = TRUE)
-sum(fgsea_res$padj < 0.05 & fgsea_res$NES > 0, na.rm = TRUE)   # enriched in responders
-sum(fgsea_res$padj < 0.05 & fgsea_res$NES < 0, na.rm = TRUE)   # enriched in non-responders
-sum(is.na(fgsea_res$padj))                                      # pathways with NA p-values
+# how many pathways are significant, and in which direction?
+cat("Significant pathways (padj < 0.05):",
+    sum(fgsea_res$padj < 0.05, na.rm = TRUE), "\n")
+cat("  enriched in responders (NES > 0):",
+    sum(fgsea_res$padj < 0.05 & fgsea_res$NES > 0, na.rm = TRUE), "\n")
+cat("  enriched in non-responders (NES < 0):",
+    sum(fgsea_res$padj < 0.05 & fgsea_res$NES < 0, na.rm = TRUE), "\n")
+cat("Pathways with NA padj:", sum(is.na(fgsea_res$padj)), "\n")                                    # 
 ```
 
 7,538 GO Biological Process gene sets were tested, and 1,223 are significant at padj \< 0.05 (about 16%)\
 459 have a positive NES, meaning they are enriched among genes higher in complete responders. 764 have a negative NES, meaning they are enriched among genes higher in non-responders (progressive disease)\
 No pathways returned NA p-values.\
+
+```{r}
+cat("Smallest / largest tested pathway size:", range(fgsea_res$size), "\n")
+cat("Pathways tested:", nrow(fgsea_res), "of", length(gene_sets), "input sets\n")
+```
+
 
 ### GSEA visualisation
 
@@ -264,9 +360,19 @@ ggplot(top_bar, aes(x = reorder(pathway_clean, NES), y = NES, fill = direction))
 
 ```{r}
 # table plots 
+#| fig-width: 18
+#| fig-height: 10
 
-topPathwaysUp   <- fgsea_res |> dplyr::filter(NES > 0) |> dplyr::arrange(pval) |> head(10) |> dplyr::pull(pathway)
-topPathwaysDown <- fgsea_res |> dplyr::filter(NES < 0) |> dplyr::arrange(pval) |> head(10) |> dplyr::pull(pathway)
+topPathwaysUp <- fgsea_res |> filter(NES > 0) |> 
+                                arrange(pval) |> 
+                                head(10) |> 
+                                pull(pathway)
+
+topPathwaysDown <- fgsea_res |> filter(NES < 0) |> 
+                                arrange(pval) |> 
+                                head(10) |> 
+                                pull(pathway)
+
 topPathways <- c(topPathwaysUp, rev(topPathwaysDown))
 
 # show in the doc
@@ -283,6 +389,7 @@ dev.off()
 topPathwaysUp
 topPathwaysDown
 ```
+
 ```{r}
 
 set.seed(42)
@@ -297,11 +404,6 @@ mainPathways[NES > 0][order(padj)][1:10, .(pathway, NES, padj, size)]
 mainPathways[NES < 0][order(padj)][1:10, .(pathway, NES, padj, size)]
 ```
 
-immune pathways??
-```{r}
-fgsea_res[grepl("INTERFERON|T_CELL|ANTIGEN|IMMUNE_RESPONSE|LEUKOCYTE", pathway) & padj < 0.05][
-  order(padj)][1:15, .(pathway, NES, padj, size)]
-```
 
 
 ```{r}
@@ -350,5 +452,10 @@ p_down
 
 ggsave("../results/plots/RQ1_enrichment_up.png",   p_up,   width = 9, height = 5, dpi = 300)
 ggsave("../results/plots/RQ1_enrichment_down.png", p_down, width = 9, height = 5, dpi = 300)
+```
+```{r}
+p_ifn <- plot_enrichment_curve("GOBP_RESPONSE_TO_TYPE_I_INTERFERON")
+p_ifn
+ggsave("../results/plots/RQ1_enrichment_ifn.png", p_ifn, width = 9, height = 5, dpi = 300)
 ```
 
