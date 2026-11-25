@@ -1,13 +1,13 @@
 ---
-title: "RQ1: Differential expression in IMvigor210"
+title: "01_RQ1_differential expression"
 author: "Lun Suša (s253705)"
 date: today
 format:
   html:
-    embed-resources: true      # one self-contained HTML (images, CSS, JS inlined)
+    embed-resources: true      
     theme: flatly
-    code-fold: true            # code hidden by default, click to show
-    code-tools: true           # "show all code" button
+    code-fold: true            
+    code-tools: true           
     df-print: paged            
 execute:
   warning: false

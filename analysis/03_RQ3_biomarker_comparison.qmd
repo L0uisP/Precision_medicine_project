@@ -6,9 +6,13 @@ format:
   html:
     embed-resources: true      
     theme: flatly
+<<<<<<< HEAD
     code-fold: true           
     code-tools: true           
     df-print: paged            
+=======
+    embed-resources: true
+>>>>>>> 9c079dd7f20adf25fc63cfc78aae53bf58e4d20a
 execute:
   warning: false
   message: false
