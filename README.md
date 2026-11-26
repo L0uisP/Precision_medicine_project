@@ -9,7 +9,7 @@ Members of group 3:
 - [Rasmus Bertelsen](https://github.com/s235350) (s235350)
 - [Henrique Gomes](https://github.com/quiquegomes123-cloud) (s253710)
 - [Maxence Marbouty](https://github.com/MaxenceMarbouty) (s253730)
-- [Louis Page](https://github.com/L0uisP) (s253729)\
+- [Louis Page](https://github.com/L0uisP) (s253729)
 
 
 ## Project structure
