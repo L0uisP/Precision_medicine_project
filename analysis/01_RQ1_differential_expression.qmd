@@ -64,6 +64,11 @@ design(dds)
 
 **limitation**: model is not adjusted for TMB, sequencing depth (other than size factors), and where the samples were taken from
 
+```{r}
+str(meta)
+```
+
+
 DESeq was already done during data preparation, so now I just have to check it. It did size-factor normalization, dispersion estimation, Wald test for BOR.
 
 ```{r}
