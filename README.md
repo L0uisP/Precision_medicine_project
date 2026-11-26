@@ -4,12 +4,12 @@
 Analysis of gene-expression biomarkers of immunotherapy response
 using the IMvigor210 dataset (Mariathasan et al., Nature 2018).
 
-Members of group 3:\
-[Lun Suša](https://github.com/lundrought) (s253705)\ 
-[Rasmus Bertelsen](https://github.com/s235350) (s235350)\ 
-[Henrique Gomes](https://github.com/quiquegomes123-cloud) (s253710)\
-[Maxence Marbouty](https://github.com/MaxenceMarbouty) (s253730)\
-[Louis Page](https://github.com/L0uisP) (s253729)\
+Members of group 3:
+- [Lun Suša](https://github.com/lundrought) (s253705) 
+- [Rasmus Bertelsen](https://github.com/s235350) (s235350)
+- [Henrique Gomes](https://github.com/quiquegomes123-cloud) (s253710)
+- [Maxence Marbouty](https://github.com/MaxenceMarbouty) (s253730)
+- [Louis Page](https://github.com/L0uisP) (s253729)\
 
 
 ## Project structure
