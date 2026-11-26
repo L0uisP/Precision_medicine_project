@@ -1,22 +1,27 @@
 ---
-title: "04_"
+title: "04_RQ4_tumor_purity"
+author: "Maxence Marbouty (s253730)"
 date: today
 format:
   html:
+    embed-resources: true      
     toc: true
     code-fold: true
     theme: flatly
+    code-tools: true           
+    df-print: paged            
 execute:
   warning: false
   message: false
+  echo: true
 ---
 
 ## Overview
 
 In this notebook, we address three questions:
 
-1.  How does tumor purity relate to `PDCD1` expression, T cell–inflamed GEP scores, and TMB measured from bulk tumor samples?
-2.  Could differences in tumor purity partly explain the biomarker associations with treatment response (`BOR`: Responder `R` vs. Non-Responder `NR`) observed in RQ2 and RQ3?
+1.  How does tumor purity relate to PDCD1 expression, T cell–inflamed GEP scores, and TMB measured from bulk tumor samples?
+2.  Could differences in tumor purity partly explain the biomarker associations with treatment response (BOR: Responder R vs. Non-Responder NR) observed in RQ2 and RQ3?
 3.  Does adjusting gene expression for tumor purity improve the biological interpretation of these biomarkers?
 
 ## Setup and data inspection
@@ -30,6 +35,7 @@ library(DESeq2)
 library(ggplot2)
 library(dplyr)
 library(knitr)
+library(tidyr)
 
 # Load prepared IMvigor210 dataset
 prep <- readRDS("../data/processed/imvigor210_prepared.rds")
@@ -100,7 +106,7 @@ df <- data.frame(
   sample = clinical$sample_id,
   TMB = TMB,
   PD1 = PD1,
-  GEP_scores = GEP_scores,
+  GEP_scores = GEP_scores$GEP_score,
   Response = factor(clinical$BOR, levels = c("NR", "R"))
 )
 
@@ -157,7 +163,7 @@ plot_association <- function(data, x, y, x_label, y_label, cor_test, title = NUL
 
 ## 2. Estimate tumor purity
 
-We estimate tumor purity from the linear TPM matrix using ESTIMATE (`immunedeconv::deconvolute_estimate()`), which infers immune and stromal infiltration from bulk gene expression.
+We estimate tumor purity from the linear TPM matrix using ESTIMATE, which infers immune and stromal infiltration from bulk gene expression.
 
 ```{r}
 #| label: estimate-purity
@@ -192,17 +198,21 @@ summary(df$purity)
 purity_Response_test <- wilcox.test(purity ~ Response, data = df)
 purity_Response_test
 
-plot_Response_boxplot(
+purity_resp <- plot_Response_boxplot(
   df, "purity",
   y_label = "Estimated tumor purity (ESTIMATE)",
   test_result = purity_Response_test,
   title = "Tumor purity by treatment response"
 )
+
+ggsave('../results/plots/RQ4_purity_responders.png', purity_resp)
+
+purity_resp
 ```
 
 ## 3. How strongly are the biomarkers related to tumor purity?
 
-We quantify the monotonic relationship between estimated tumor purity and each candidate biomarker using Spearman rank correlation.
+We quantify the relationship between estimated tumor purity and each candidate biomarker using Spearman rank correlation.
 
 ```{r}
 #| label: purity-correlations
@@ -236,7 +246,7 @@ GEP_purity_cor
 ```{r}
 #| label: plot-purity-correlations
 
-plot_association(
+purity_tmb <- plot_association(
   df, "purity", "TMB",
   x_label = "Estimated tumor purity",
   y_label = "Tumor mutational burden (mut/Mb)",
@@ -244,7 +254,7 @@ plot_association(
   title = "Tumor purity vs. TMB"
 )
 
-plot_association(
+purity_pd1 <- plot_association(
   df, "purity", "PD1",
   x_label = "Estimated tumor purity",
   y_label = "PDCD1 expression (log2 TPM + 1)",
@@ -252,13 +262,22 @@ plot_association(
   title = "Tumor purity vs. PDCD1 expression"
 )
 
-plot_association(
+purity_gep <- plot_association(
   df, "purity", "GEP_scores",
   x_label = "Estimated tumor purity",
   y_label = "T cell-inflamed GEP score",
   cor_test = GEP_purity_cor,
   title = "Tumor purity vs. T cell-inflamed GEP score"
 )
+
+ggsave('../results/plots/RQ4_correlation_purity_tmb.png', purity_tmb)
+ggsave('../results/plots/RQ4_correlation_purity_pd1.png', purity_pd1)
+ggsave('../results/plots/RQ4_correlation_purity_gep.png', purity_gep)
+
+
+purity_tmb 
+purity_pd1
+purity_gep
 ```
 
 ## 4. Sensitivity analysis: adjusting expression for tumor purity
@@ -277,7 +296,14 @@ expr_adjusted <- removeBatchEffect(
 # Re-extract PDCD1 and recalculate GEP score on purity-adjusted expression
 PD1_adjusted <- as.numeric(expr_adjusted["PDCD1", ])
 
-GEP_expr_adjusted <- expr_adjusted[GEP_genes_present, , drop = FALSE]
+GEP_genes <- c(
+"CD27", "CD274", "PDCD1", "CD276", "CD8A", "CMKLR1",
+"CXCL9", "CXCR6", "HLA-DQA1", "HLA-DRB1", "HLA-E",
+"IDO1", "LAG3", "NKG7", "PDCD1LG2", "PSMB10", "STAT1",
+"TIGIT"
+) # from RQ2
+
+GEP_expr_adjusted <- expr_adjusted[GEP_genes, , drop = FALSE]
 GEP_expr_adjusted_scaled <- t(scale(t(GEP_expr_adjusted)))
 GEP_scores_adjusted <- colMeans(GEP_expr_adjusted_scaled, na.rm = TRUE)
 
@@ -302,19 +328,25 @@ GEP_Response_adjusted_test <- wilcox.test(GEP_scores ~ Response, data = df_adjus
 PD1_Response_adjusted_test
 GEP_Response_adjusted_test
 
-plot_Response_boxplot(
+pur_adj_pd1 <- plot_Response_boxplot(
   df_adjusted, "PD1",
   y_label = "Purity-adjusted PDCD1 expression",
   test_result = PD1_Response_adjusted_test,
   title = "Purity-adjusted PDCD1 expression by response"
 )
 
-plot_Response_boxplot(
+pur_adj_gep <- plot_Response_boxplot(
   df_adjusted, "GEP_scores",
   y_label = "Purity-adjusted T cell-inflamed GEP score",
   test_result = GEP_Response_adjusted_test,
   title = "Purity-adjusted GEP score by response"
 )
+
+ggsave('../results/plots/RQ4_purity_adjusted_PD1.png', pur_adj_pd1)
+ggsave('../results/plots/RQ4_purity_adjusted_GEP.png', pur_adj_gep)
+
+pur_adj_pd1
+pur_adj_gep
 ```
 
 ## 5. Summary comparison: Unadjusted vs. Purity-Adjusted
@@ -328,20 +360,64 @@ summary_tbl <- data.frame(
   Biomarker = c("TMB", "PDCD1 (PD-1)", "T cell–inflamed GEP", "Tumor purity (ESTIMATE)"),
   Rho       = c("0.12", "-0.69", "-0.77", "—"),
   P_cor     = fmt_p(c(TMB_purity_cor$p.value, PD1_purity_cor$p.value, GEP_purity_cor$p.value, NA)),
-  P_unadj   = fmt_p(c(TMB_Response_test$p.value, PD1_Response_test$p.value, GEP_Response_test$p.value, purity_Response_test$p.value)),
+  P_unadj   = fmt_p(c(1.73e-5, 3.96e-4, 6.11e-4, purity_Response_test$p.value)),
   P_adj     = fmt_p(c(NA, PD1_Response_adjusted_test$p.value, GEP_Response_adjusted_test$p.value, NA))
 )
 
-knitr::kable(
-  summary_tbl,
-  format = "pipe",
-  col.names = c("Biomarker", "Spearman ρ", "Purity cor. p", "Unadjusted BOR p", "Purity-adjusted BOR p"),
-  align = "lcccc"
-)
+summary_tbl
+```
+
+```{r}
+
+df_compare <- data.frame(
+  Response   = df$Response,
+  Unadjusted = df$GEP_scores,
+  Adjusted   = df_adjusted$GEP_scores
+) |>
+  pivot_longer(cols = c(Unadjusted, Adjusted), names_to = "Stage", values_to = "GEP") |>
+  mutate(Stage = factor(Stage, levels = c("Unadjusted", "Adjusted")))
+
+p_compare_gep <- ggplot(df_compare, aes(x = Response, y = GEP, fill = Response)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.5, show.legend = FALSE) +
+  geom_jitter(width = 0.12, alpha = 0.5, show.legend = FALSE) +
+  facet_wrap(~ Stage) +
+  labs(
+    title = "T cell–inflamed GEP score before and after purity adjustment",
+    x = "Best Overall Response (BOR)",
+    y = "GEP score"
+  ) +
+  theme_minimal()
+
+ggsave("../results/plots/RQ4_GEP_before_after_comparison.png", p_compare_gep, width = 7, height = 4)
+p_compare_gep
+```
+
+```{r}
+df_compare_pd1 <- data.frame(
+  Response   = df$Response,
+  Unadjusted = df$PD1,
+  Adjusted   = df_adjusted$PD1
+) |>
+  pivot_longer(cols = c(Unadjusted, Adjusted), names_to = "Stage", values_to = "PD1") |>
+  mutate(Stage = factor(Stage, levels = c("Unadjusted", "Adjusted")))
+
+p_compare_pd1 <- ggplot(df_compare_pd1, aes(x = Response, y = PD1, fill = Response)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.5, show.legend = FALSE) +
+  geom_jitter(width = 0.12, alpha = 0.5, show.legend = FALSE) +
+  facet_wrap(~ Stage) +
+  labs(
+    title = "PDCD1 (PD-1) expression before and after purity adjustment",
+    x = "Best Overall Response (BOR)",
+    y = "PDCD1 expression"
+  ) +
+  theme_minimal()
+
+ggsave("../results/plots/RQ4_PD1_before_after_comparison.png", p_compare_pd1, width = 7, height = 4)
+p_compare_pd1
 ```
 
 ## 6. Discussion and interpretation
 
--   **How tumor purity influences bulk RNA-seq biomarkers:** Bulk RNA-seq measures an average expression profile across malignant, immune, and stromal cells. Because `PDCD1` and the 18-gene GEP primarily reflect infiltrating T cells and IFN-$\gamma$–driven immune activity, higher tumor purity dilutes immune transcripts, typically producing a strong negative correlation between estimated purity and immune biomarker levels. In contrast, TMB is derived from somatic mutations in tumor DNA rather than immune-cell RNA, so its relationship with purity behaves differently.
--   **Impact on RQ2 and RQ3 associations:** I have to check their results, but if they also found an association: both remain significantly associated with treatment response after regressing out purity ($p = 1.60 \times 10^{-3}$ and $p = 2.78 \times 10^{-5}$), while purity itself does not differ between responders and non-responders ($p = 0.179$). This shows that the associations found in RQ2 and RQ3 are not just an artifact of bulk immune-cell dilution, but reflect actual differences in T-cell activation.
--   **Should we adjust for tumor purity?** Not automatically. Unlike a technical batch effect, cellular composition in the tumor microenvironment is a core biological determinant of anti-PD-L1 efficacy. Regressing out tumor purity removes genuine biological signal (the presence of infiltrating T cells) and changes the scientific question from *"Does total immune infiltration/activation associate with response?"* to *"Does residual immune gene expression beyond bulk cellular composition associate with response?"*.
+-   **How tumor purity influences bulk RNA-seq biomarkers:** Bulk RNA-seq measures an average expression profile across malignant, immune, and stromal cells. Because PDCD1 and the 18-gene GEP primarily reflect infiltrating T cells and immune activity, higher tumor purity dilutes immune transcripts, leading to a strong negative correlation between estimated purity and immune biomarker levels. In contrast, TMB is derived from somatic mutations in tumor DNA rather than immune-cell RNA, so its relationship with purity behaves differently.
+-   **Impact on RQ2 and RQ3 associations:** Both remain significantly associated with treatment response after regressing out purity ($p = 1.60 \times 10^{-3}$ and $p = 2.78 \times 10^{-5}$), while purity itself does not differ between responders and non-responders ($p = 0.179$). This shows that the associations found in RQ2 and RQ3 are not just an artifact of bulk immune-cell dilution, but reflect actual differences in T-cell activation.
+-   **Should we adjust for tumor purity?** Not automatically. Unlike a technical batch effect, cellular composition in the tumor microenvironment is a biological determinant of anti-PD-L1 efficacy. Regressing out tumor purity removes genuine biological signal (the presence of infiltrating T cells) and changes the scientific question from *"Does total immune infiltration/activation associate with response?"* to *"Does residual immune gene expression beyond bulk cellular composition associate with response?"*.
